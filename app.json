@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "7b11d7f0-2f14-49d7-852c-798cd5155ef9"
+      }
+    },
+    "android": {
+      "package": "com.afo32.hospitaldeplantas"
+    }
+  }
+}
