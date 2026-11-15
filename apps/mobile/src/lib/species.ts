@@ -9,9 +9,8 @@ import {
   speciesSummarySchema,
   type SpeciesSummary,
 } from '@hdp/shared';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { Platform } from 'react-native';
 import { api } from './api';
+import { toBase64 } from './media';
 
 export async function searchSpecies(params: { q?: string; category?: PlantCategory }): Promise<SpeciesSummary[]> {
   const qs = new URLSearchParams();
@@ -45,26 +44,6 @@ export async function getSpeciesDetail(id: string, retry = false): Promise<Speci
 }
 
 export type Photo = { uri: string; organ: PhotoOrgan };
-
-/** Reduce la foto a 1280 px de ancho, JPEG 70 %, y la devuelve en base64 (~200–400 KB por foto). */
-async function toBase64(uri: string): Promise<string> {
-  if (Platform.OS === 'web') {
-    const blob = await (await fetch(uri)).blob();
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error('No se pudo leer la foto'));
-      reader.readAsDataURL(blob);
-    });
-    return dataUrl.slice(dataUrl.indexOf(',') + 1);
-  }
-  const context = ImageManipulator.manipulate(uri);
-  context.resize({ width: 1280 });
-  const image = await context.renderAsync();
-  const result = await image.saveAsync({ compress: 0.7, format: SaveFormat.JPEG, base64: true });
-  if (!result.base64) throw new Error('No se pudo preparar la foto');
-  return result.base64;
-}
 
 /**
  * Envía las fotos dentro de un JSON normal (en base64). Es más fiable que subir archivos con

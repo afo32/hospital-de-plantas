@@ -25,12 +25,22 @@ const envSchema = z.object({
   /** ID de cliente OAuth de tipo "Aplicación web" de Google Cloud. Vacío = inicio con Google desactivado. */
   GOOGLE_WEB_CLIENT_ID: z.string().optional(),
   PLANTNET_API_KEY: z.string().optional(),
-  KINDWISE_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   /** Modelo de Claude para las fichas y el diagnóstico */
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5-5'),
   /** Identificaciones por foto por usuario y día */
   IDENTIFY_DAILY_LIMIT: z.coerce.number().int().positive().default(10),
+  /** Diagnósticos de salud por usuario y día */
+  DIAGNOSE_DAILY_LIMIT: z.coerce.number().int().positive().default(3),
+  /* Fotos en Cloudflare R2. Si faltan, se guardan en el disco del servidor (UPLOADS_DIR). */
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
+  /** Solo para pruebas con otro servicio compatible con S3; normalmente vacío */
+  R2_ENDPOINT: z.string().optional(),
+  /** Carpeta para las fotos cuando no hay R2 configurado */
+  UPLOADS_DIR: z.string().default('uploads'),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,5 +1,6 @@
 import { TASK_LABELS, type Task } from '@hdp/shared';
 import { Image } from 'expo-image';
+import { imageSource } from '@/lib/media';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { relativeDay, shortDate } from '@/lib/dates';
 import { colors, radius, space } from '@/theme/tokens';
@@ -33,7 +34,7 @@ export function TaskRow({ task, today, busy, onToggle, onSnooze, onOpen }: Props
     <Card style={[styles.card, task.done && styles.done]} onPress={onOpen} accessibilityLabel={`${task.plantName}: ${what}`}>
       <View style={styles.row}>
         {task.imageUrl ? (
-          <Image source={{ uri: task.imageUrl }} style={styles.image} contentFit="cover" />
+          <Image source={imageSource(task.imageUrl)} style={styles.image} contentFit="cover" />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
             <SproutIcon color={colors.fern} size={26} />

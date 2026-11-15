@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   addPlantSchema,
@@ -14,6 +14,8 @@ import {
   TASK_TYPES,
   type TaskType,
   type Reminders,
+  setPlantPhotoSchema,
+  type SetPlantPhotoInput,
   type TodayResponse,
   updatePlantSchema,
   type UpdatePlantInput,
@@ -93,6 +95,22 @@ export class PlantsController {
   @HttpCode(204)
   async remove(@CurrentUserId() userId: string, @Param('id', { schema: uuid }) id: string): Promise<void> {
     await this.garden.removePlant(userId, id);
+  }
+
+  /** Foto propia de la planta: { base64 } (JPEG, PNG o WebP). */
+  @Put('photo')
+  setPhoto(
+    @CurrentUserId() userId: string,
+    @Param('id', { schema: uuid }) id: string,
+    @Body({ schema: setPlantPhotoSchema }) body: SetPlantPhotoInput,
+  ): Promise<PlantDetail> {
+    return this.garden.setPhoto(userId, id, body.base64);
+  }
+
+  /** Quitar la foto propia y volver a la de la especie. */
+  @Delete('photo')
+  removePhoto(@CurrentUserId() userId: string, @Param('id', { schema: uuid }) id: string): Promise<PlantDetail> {
+    return this.garden.removePhoto(userId, id);
   }
 
   /** Marcar como hecha hoy: { type: "water" | "fertilize" | "repot" } */

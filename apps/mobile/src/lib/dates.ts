@@ -51,3 +51,12 @@ export function monthGrid(year: number, month: number): (string | null)[] {
   while (cells.length % 7) cells.push(null);
   return cells;
 }
+
+const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+
+/** "15 nov 2026 · 23:10" a partir de una fecha ISO, en la hora del móvil. */
+export function dateTimeLabel(iso: string): string {
+  const d = new Date(iso);
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()} · ${time}`;
+}

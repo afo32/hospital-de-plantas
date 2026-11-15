@@ -109,6 +109,8 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
         <Stack.Screen name="plant-setup/[speciesId]" options={{ title: 'Añadir planta' }} />
         <Stack.Screen name="plant/[id]" options={{ title: '', headerBackTitle: 'Volver' }} />
         <Stack.Screen name="light-meter" options={{ title: 'Medidor de luz' }} />
+        <Stack.Screen name="diagnose/[plantId]" options={{ title: 'Revisar su salud' }} />
+        <Stack.Screen name="diagnosis/[id]" options={{ title: 'Salud', headerBackTitle: 'Volver' }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn} redirectTo="/">
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />

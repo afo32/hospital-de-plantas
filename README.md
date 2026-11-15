@@ -10,7 +10,9 @@ Monorepo con tres paquetes:
 | `apps/api` | Servidor | NestJS 12, Prisma 7, PostgreSQL 16 |
 | `packages/shared` | Catálogos y esquemas compartidos | TypeScript + Zod |
 
-**Estado: fase 5 de 7.**
+**Estado: fase 6 de 7.**
+
+- Fase 6: pestaña Salud con revisión por fotos: Claude mira hasta 3 fotos, pregunta por la tierra, el riego y los cambios recientes, y da diagnóstico, tratamiento paso a paso, cambios de cuidados y fecha de revisión (con aviso). Notas con texto y hasta 4 fotos, foto propia de cada planta, fotos en Cloudflare R2 o en disco ([docs/fotos-r2.md](docs/fotos-r2.md)).
 
 - Fase 1: tema élfico, navegación (Mi jardín con Hoy / Mis plantas, Buscar, Perfil), botón + y Añadir planta con categorías. API con `GET /v1/health` y esquema completo de la base de datos.
 - Fase 2: cuentas con email y contraseña, e inicio con Google (Android, build de desarrollo: ver [docs/google-login.md](docs/google-login.md)).
@@ -106,7 +108,7 @@ npm test            # tests del API
 4. En el servicio del API → **Variables**:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (referencia a la base de datos)
    - `NODE_ENV` = `production`
-   - el resto de `apps/api/.env.example` según la fase
+   - el resto de `apps/api/.env.example` según la fase (desde la fase 6, las `R2_*`: en Railway el disco se borra en cada despliegue)
 5. El archivo `apps/api/railway.json` ya indica cómo construir, aplicar migraciones antes de cada despliegue y arrancar. En **Settings → Config-as-code** apunta a `apps/api/railway.json` y deja el *Root Directory* vacío (la raíz del repo).
 6. En **Settings → Networking → Generate Domain** obtienes la URL pública; ponla en `apps/mobile/.env` como `EXPO_PUBLIC_API_URL=https://tu-api.up.railway.app/v1`.
 
@@ -132,6 +134,10 @@ hospital-de-plantas/
 │     ├─ garden/               plantas, tareas de Hoy, completar, posponer, calendario
 │     │  └─ care-engine.ts     motor de cuidado (fórmulas de riego, abono, trasplante y maceta)
 │     ├─ weather/              clima y búsqueda de ciudades (Open-Meteo), con caché por zona
+│     ├─ storage/              fotos en R2 o disco, enlaces firmados /v1/files/…
+│     ├─ notes/                notas con fotos
+│     ├─ diagnosis/            revisión de salud con Claude (fotos → preguntas → tratamiento)
+│     ├─ ai/ask.ts             llamada a Claude con salida estructurada
 │     ├─ usage/                límites diarios por usuario
 │     └─ users/                GET y PATCH /v1/me
 └─ apps/mobile/src/
@@ -144,6 +150,8 @@ hospital-de-plantas/
    │  ├─ plant-setup/[speciesId].tsx  Cuestionario al añadir una planta
    │  ├─ plant/[id].tsx        Detalle de tu planta (Cuidado · Salud · Notas · Info)
    │  ├─ light-meter.tsx       Medidor de luz
+   │  ├─ diagnose/[plantId].tsx  Revisión de salud: fotos y síntomas
+   │  ├─ diagnosis/[id].tsx    Preguntas y diagnóstico con tratamiento
    │  └─ species/[id].tsx      Ficha Info de una especie
    │  ├─ (auth)/login.tsx      Entrar
    │  ├─ (auth)/register.tsx   Crear cuenta
@@ -153,7 +161,9 @@ hospital-de-plantas/
    └─ lib/
       ├─ api.ts                cliente del API con renovación automática del token
       ├─ offline.ts            caché sin conexión y cola de cambios pendientes
-      ├─ notifications.ts      avisos locales (riego, abono, trasplante, helada)
+      ├─ notifications.ts      avisos locales (riego, abono, trasplante, helada, revisiones)
+      ├─ health.ts             notas, fotos y revisiones de salud
+      ├─ media.ts              elegir fotos, reducirlas y mostrarlas
       └─ location.ts           ubicación por GPS o por ciudad
 ```
 
@@ -164,7 +174,8 @@ hospital-de-plantas/
 | GBIF | Buscar plantas por nombre | No | Gratis |
 | Wikipedia | Foto de cada especie | No | Gratis |
 | Pl@ntNet | Identificar por fotos | `PLANTNET_API_KEY` | Gratis hasta 500/día |
-| Claude (Anthropic) | Escribir la ficha Info | `ANTHROPIC_API_KEY` | De pago por uso; una vez por especie |
+| Claude (Anthropic) | Ficha Info y revisiones de salud | `ANTHROPIC_API_KEY` | De pago por uso: ficha una vez por especie; unos 5-10 céntimos por revisión completa (máx. 3 al día por persona, `DIAGNOSE_DAILY_LIMIT`) |
+| Cloudflare R2 | Guardar las fotos | `R2_*` | Gratis hasta 10 GB |
 | Google | Inicio de sesión | `GOOGLE_WEB_CLIENT_ID` | Gratis |
 | Open-Meteo | Tiempo y búsqueda de ciudades | No | Gratis (uso no comercial) |
 
@@ -180,5 +191,5 @@ Pergamino, musgo, corteza y oro viejo. Titulares en *Cormorant Garamond*, texto 
 3. ~~Especies, búsqueda, identificación por fotos y ficha Info con IA~~ ✅
 4. ~~Mi jardín: cuestionario, motor de cuidado, tareas, posponer, calendario~~ ✅
 5. ~~Clima, luxómetro, notificaciones y modo sin conexión~~ ✅
-6. Salud (diagnóstico con IA) y notas con fotos
+6. ~~Salud (diagnóstico con IA) y notas con fotos~~ ✅
 7. Jardín compartido, pruebas y publicación

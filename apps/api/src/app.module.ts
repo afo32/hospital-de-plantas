@@ -2,10 +2,13 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module.js';
+import { DiagnosisModule } from './diagnosis/diagnosis.module.js';
 import { GardenModule } from './garden/garden.module.js';
+import { NotesModule } from './notes/notes.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { SpeciesModule } from './species/species.module.js';
+import { StorageModule } from './storage/storage.module.js';
 import { WeatherModule } from './weather/weather.module.js';
 
 @Module({
@@ -17,10 +20,13 @@ import { WeatherModule } from './weather/weather.module.js';
     }),
     PrismaModule,
     WeatherModule,
+    StorageModule,
     HealthModule,
     AuthModule,
     SpeciesModule,
     GardenModule,
+    NotesModule,
+    DiagnosisModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

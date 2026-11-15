@@ -136,7 +136,8 @@ model UserPlant {
   gardenId           String    @db.Uuid
   speciesId          String    @db.Uuid
   nickname           String?
-  photoUrl           String?
+  /// Foto propia (clave en el almacenamiento de fotos); null = foto de la especie
+  photoKey           String?   @map("photoUrl")
   /// indoor | outdoor | indoor_night_outdoor_day
   location           String
   room               String?
@@ -198,7 +199,8 @@ model Note {
   plantId   String    @db.Uuid
   authorId  String    @db.Uuid
   text      String?
-  photoUrls String[]
+  /// Claves de las fotos en el almacenamiento
+  photoKeys String[]  @map("photoUrls")
   createdAt DateTime  @default(now())
   plant     UserPlant @relation(fields: [plantId], references: [id], onDelete: Cascade)
   author    User      @relation(fields: [authorId], references: [id])
@@ -209,15 +211,18 @@ model Note {
 model Diagnosis {
   id         String    @id @default(uuid()) @db.Uuid
   plantId    String    @db.Uuid
-  photoUrls  String[]
-  /// Respuestas al cuestionario
+  /// Claves de las fotos en el almacenamiento
+  photoKeys  String[]  @map("photoUrls")
+  /// Lo que la persona cuenta que le pasa (opcional)
+  symptoms   String?
+  /// Primer análisis de Claude: lo que ve, hipótesis y preguntas
+  triage     Json?     @map("apiResult")
+  /// Respuestas a las preguntas
   answers    Json      @default("[]")
-  /// Respuesta cruda de plant.health
-  apiResult  Json?
   /// Diagnóstico final, causas y plan de tratamiento
   result     Json?
-  /// in_progress | done | resolved
-  status     String    @default("in_progress")
+  /// questions | done | resolved
+  status     String    @default("questions")
   followUpAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt

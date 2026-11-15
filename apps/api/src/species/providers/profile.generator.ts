@@ -1,8 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { Injectable, Logger } from '@nestjs/common';
 import { PLANT_CATEGORIES, speciesProfileSchema, type SpeciesProfile } from '@hdp/shared';
 import { z } from 'zod';
+import { askStructured } from '../../ai/ask.js';
 import { env } from '../../config/env.js';
 
 const SYSTEM_PROMPT = `Eres un horticultor y botánico experto que escribe fichas de cuidado de plantas para una app en español de España.
@@ -114,59 +114,8 @@ export class ProfileGenerator {
     return profile;
   }
 
-  /**
-   * Pide una parte con salida estructurada. Si la API rechaza el esquema (p. ej. "grammar is too large"),
-   * repite pidiendo JSON normal y lo valida con el mismo esquema.
-   */
-  private async ask<S extends z.ZodType>(schema: S, prompt: string, maxTokens: number): Promise<z.infer<S>> {
-    const client = this.client!;
-    try {
-      const message = await client.messages.parse(
-        {
-          model: env.ANTHROPIC_MODEL,
-          max_tokens: maxTokens,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: prompt }],
-          output_config: { format: zodOutputFormat(schema) },
-        },
-        { timeout: 180_000 },
-      );
-      if (message.parsed_output == null) {
-        throw new Error(`Respuesta sin datos (stop_reason=${message.stop_reason})`);
-      }
-      return message.parsed_output as z.infer<S>;
-    } catch (err) {
-      if (!(err instanceof Anthropic.APIError) || err.status !== 400) throw err;
-      this.logger.warn(`Salida estructurada rechazada (${err.message.slice(0, 120)}). Reintento con JSON normal.`);
-      return this.askPlainJson(schema, prompt, maxTokens);
-    }
-  }
-
-  private async askPlainJson<S extends z.ZodType>(schema: S, prompt: string, maxTokens: number): Promise<z.infer<S>> {
-    const jsonSchema = JSON.stringify(z.toJSONSchema(schema));
-    const message = await this.client!.messages.create(
-      {
-        model: env.ANTHROPIC_MODEL,
-        max_tokens: maxTokens,
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: `${prompt}\n\nResponde SOLO con un objeto JSON válido (sin texto alrededor ni bloques de código) que cumpla este JSON Schema:\n${jsonSchema}`,
-          },
-        ],
-      },
-      { timeout: 180_000 },
-    );
-    const raw = message.content
-      .map((block) => (block.type === 'text' ? block.text : ''))
-      .join('')
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '');
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start === -1 || end === -1) throw new Error('La respuesta no contiene JSON');
-    return schema.parse(JSON.parse(raw.slice(start, end + 1)));
+  /** Pide una parte con salida estructurada (con reintento en JSON normal si la API rechaza el esquema). */
+  private ask<S extends z.ZodType>(schema: S, prompt: string, maxTokens: number): Promise<z.infer<S>> {
+    return askStructured(this.client!, this.logger, { schema, system: SYSTEM_PROMPT, content: prompt, maxTokens });
   }
 }

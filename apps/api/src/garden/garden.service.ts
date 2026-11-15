@@ -20,6 +20,7 @@ import {
 import { addDays, dayToDate, diffDays, localDay, monthOf } from '../common/days.js';
 import type { CareEvent, Species, User, UserPlant } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { StorageService } from '../storage/storage.service.js';
 import { WeatherService } from '../weather/weather.service.js';
 import { computeCarePlan } from './care-engine.js';
 
@@ -27,14 +28,15 @@ import { computeCarePlan } from './care-engine.js';
 const UPCOMING_DAYS = 7;
 const careSchema = speciesProfileSchema.shape.care;
 
-type PlantWithRelations = UserPlant & { species: Species; events: (CareEvent & { doneBy: { name: string | null } })[] };
-type Ctx = { user: User; today: string; tz: string; southern: boolean; weather: Weather | null };
+export type PlantWithRelations = UserPlant & { species: Species; events: (CareEvent & { doneBy: { name: string | null } })[] };
+export type Ctx = { user: User; today: string; tz: string; southern: boolean; weather: Weather | null };
 
 @Injectable()
 export class GardenService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly weatherService: WeatherService,
+    private readonly storage: StorageService,
   ) {}
 
   /* ---------- Permisos y contexto ---------- */
@@ -112,7 +114,7 @@ export class GardenService {
       id: plant.id,
       name: plant.nickname ?? s.commonNames[0] ?? s.scientificName,
       nickname: plant.nickname,
-      imageUrl: plant.photoUrl ?? s.imageUrl,
+      imageUrl: this.storage.url(plant.photoKey) ?? s.imageUrl,
       room: plant.room,
       location: plant.location,
       species: {
@@ -248,8 +250,57 @@ export class GardenService {
   }
 
   async removePlant(userId: string, plantId: string): Promise<void> {
-    await this.loadPlant(userId, plantId, true);
-    await this.prisma.userPlant.update({ where: { id: plantId }, data: { archivedAt: new Date() } });
+    const plant = await this.loadPlant(userId, plantId, true);
+    // Se borran sus fotos, notas y diagnósticos; la planta queda archivada con su historial de cuidados.
+    const [notes, diagnoses] = await Promise.all([
+      this.prisma.note.findMany({ where: { plantId }, select: { photoKeys: true } }),
+      this.prisma.diagnosis.findMany({ where: { plantId }, select: { photoKeys: true } }),
+    ]);
+    await this.prisma.$transaction([
+      this.prisma.note.deleteMany({ where: { plantId } }),
+      this.prisma.diagnosis.deleteMany({ where: { plantId } }),
+      this.prisma.userPlant.update({ where: { id: plantId }, data: { archivedAt: new Date(), photoKey: null } }),
+    ]);
+    await this.storage.remove([plant.photoKey, ...notes.flatMap((n) => n.photoKeys), ...diagnoses.flatMap((d) => d.photoKeys)]);
+  }
+
+  /* ---------- Foto propia ---------- */
+
+  async setPhoto(userId: string, plantId: string, base64: string): Promise<PlantDetail> {
+    const plant = await this.loadPlant(userId, plantId, true);
+    const key = await this.storage.putImage('plant', plantId, base64);
+    await this.prisma.userPlant.update({ where: { id: plantId }, data: { photoKey: key } });
+    await this.storage.remove([plant.photoKey]);
+    return this.getPlant(userId, plantId);
+  }
+
+  /** Vuelve a la foto de la especie. */
+  async removePhoto(userId: string, plantId: string): Promise<PlantDetail> {
+    const plant = await this.loadPlant(userId, plantId, true);
+    await this.prisma.userPlant.update({ where: { id: plantId }, data: { photoKey: null } });
+    await this.storage.remove([plant.photoKey]);
+    return this.getPlant(userId, plantId);
+  }
+
+  /* ---------- Para otros módulos (salud, notas) ---------- */
+
+  /** Comprueba que puedes ver (o editar, con `write`) la planta y la devuelve. */
+  accessPlant(userId: string, plantId: string, write = false): Promise<PlantWithRelations> {
+    return this.loadPlant(userId, plantId, write);
+  }
+
+  /** Comprueba permisos y devuelve la planta con su plan y el contexto (zona, clima, día local). */
+  async plantContext(userId: string, plantId: string, write = false) {
+    const plant = await this.loadPlant(userId, plantId, write);
+    const ctx = await this.context(userId);
+    let plan: CarePlan | null = null;
+    try {
+      plan = this.plan(plant, ctx);
+    } catch {
+      plan = null;
+    }
+    const name = plant.nickname ?? plant.species.commonNames[0] ?? plant.species.scientificName;
+    return { plant, plan, ctx, name };
   }
 
   /* ---------- Tareas ---------- */
@@ -331,7 +382,7 @@ export class GardenService {
         continue; // especie sin ficha todavía
       }
       const name = p.nickname ?? p.species.commonNames[0] ?? p.species.scientificName;
-      const base = { plantId: p.id, plantName: name, imageUrl: p.photoUrl ?? p.species.imageUrl };
+      const base = { plantId: p.id, plantName: name, imageUrl: this.storage.url(p.photoKey) ?? p.species.imageUrl };
 
       for (const type of ['water', 'fertilize', 'repot'] as const) {
         const doneToday = p.events.find((e) => e.type === type && e.taskDay === ctx.today);
@@ -402,7 +453,13 @@ export class GardenService {
     const ctx = await this.context(userId);
     const to = addDays(ctx.today, days);
     const plants = await this.plantsOfGarden(gardenId);
-    const byDay = new Map<string, { water: string[]; fertilize: string[]; repot: string[] }>();
+    type DayEntry = { water: string[]; fertilize: string[]; repot: string[]; checkup: string[] };
+    const byDay = new Map<string, DayEntry>();
+    const entryOf = (day: string) => {
+      const entry = byDay.get(day) ?? { water: [], fertilize: [], repot: [], checkup: [] };
+      byDay.set(day, entry);
+      return entry;
+    };
     const alerts = new Map<string, string[]>();
 
     for (const p of plants) {
@@ -416,13 +473,27 @@ export class GardenService {
       const doneToday = new Set(p.events.filter((e) => e.taskDay === ctx.today).map((e) => e.type));
       for (const t of this.projectTasks(p, plan, ctx, ctx.today, to)) {
         if (t.day === ctx.today && doneToday.has(t.type)) continue;
-        const entry = byDay.get(t.day) ?? { water: [], fertilize: [], repot: [] };
-        entry[t.type].push(name);
-        byDay.set(t.day, entry);
+        entryOf(t.day)[t.type].push(name);
       }
       for (const a of plan.climate?.alerts ?? []) {
         alerts.set(a.day, [...(alerts.get(a.day) ?? []), a.message]);
       }
+    }
+
+    // Revisiones de salud pendientes (diagnósticos sin marcar como curados).
+    const checkups = await this.prisma.diagnosis.findMany({
+      where: {
+        plantId: { in: plants.map((p) => p.id) },
+        status: 'done',
+        followUpAt: { gte: dayToDate(ctx.today), lte: dayToDate(to) },
+      },
+      select: { plantId: true, followUpAt: true },
+    });
+    for (const c of checkups) {
+      const p = plants.find((x) => x.id === c.plantId)!;
+      const name = p.nickname ?? p.species.commonNames[0] ?? p.species.scientificName;
+      const entry = entryOf(c.followUpAt!.toISOString().slice(0, 10));
+      if (!entry.checkup.includes(name)) entry.checkup.push(name);
     }
 
     return {

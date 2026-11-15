@@ -7,7 +7,9 @@ import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { CareTab } from '@/components/CareTab';
-import { EmptyState } from '@/components/EmptyState';
+import { ActionSheet } from '@/components/ActionSheet';
+import { HealthTab } from '@/components/HealthTab';
+import { NotesTab } from '@/components/NotesTab';
 import { PencilIcon, SproutIcon } from '@/components/icons';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { SnoozeSheet } from '@/components/SnoozeSheet';
@@ -17,6 +19,8 @@ import { VineDivider } from '@/components/VineDivider';
 import { completeTask, getPlant, removePlant, snoozeWatering, undoTask, updatePlant } from '@/lib/garden';
 import { QueuedOffline } from '@/lib/offline';
 import { getSpeciesDetail } from '@/lib/species';
+import { removePlantPhoto, setPlantPhoto } from '@/lib/health';
+import { imageSource, pickPhotos, type PhotoSource } from '@/lib/media';
 import { Banner } from '@/components/Banner';
 import { colors, radius, space } from '@/theme/tokens';
 
@@ -41,6 +45,7 @@ export default function PlantScreen() {
   const [newName, setNewName] = useState('');
   const [calendarVersion, setCalendarVersion] = useState(0);
   const [offline, setOffline] = useState(false);
+  const [photoSheet, setPhotoSheet] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -78,6 +83,11 @@ export default function PlantScreen() {
     }
   };
 
+  const changePhoto = async (source: PhotoSource) => {
+    const [uri] = await pickPhotos(source, 1);
+    if (uri) await run('photo', () => setPlantPhoto(id, uri));
+  };
+
   const onUpdate = async (input: UpdatePlantInput) => run('update', () => updatePlant(id, input));
 
   const confirmRemove = () => {
@@ -110,6 +120,7 @@ export default function PlantScreen() {
   }
 
   const { plant } = detail;
+  const ownPhoto = plant.imageUrl?.startsWith('/files/') ?? false;
   const scientific = plant.species.scientificName;
   const common = plant.species.commonName;
 
@@ -117,13 +128,31 @@ export default function PlantScreen() {
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: '' }} />
 
-      {plant.imageUrl ? (
-        <Image source={{ uri: plant.imageUrl }} style={styles.hero} contentFit="cover" transition={250} />
-      ) : (
-        <View style={[styles.hero, styles.heroEmpty]}>
-          <SproutIcon color={colors.fern} size={64} />
-        </View>
-      )}
+      <View>
+        {plant.imageUrl ? (
+          <Image source={imageSource(plant.imageUrl)} style={styles.hero} contentFit="cover" transition={250} />
+        ) : (
+          <View style={[styles.hero, styles.heroEmpty]}>
+            <SproutIcon color={colors.fern} size={64} />
+          </View>
+        )}
+        {!offline ? (
+          <Pressable
+            onPress={() => setPhotoSheet(true)}
+            style={styles.photoButton}
+            accessibilityRole="button"
+            accessibilityLabel="Cambiar foto"
+          >
+            {busy === 'photo' ? (
+              <ActivityIndicator color={colors.vellum} />
+            ) : (
+              <AppText variant="label" color={colors.vellum}>
+                📷 {ownPhoto ? 'Cambiar foto' : 'Poner mi foto'}
+              </AppText>
+            )}
+          </Pressable>
+        ) : null}
+      </View>
 
       <View style={styles.titleRow}>
         <View style={styles.flex}>
@@ -189,20 +218,9 @@ export default function PlantScreen() {
         />
       ) : null}
 
-      {tab === 'health' ? (
-        <Card>
-          <EmptyState
-            title="Revisión de salud"
-            message="Pronto podrás hacerle fotos y la IA te preguntará por el sustrato, la maceta y el riego para darte un diagnóstico con soluciones reales (fase 6)."
-          />
-        </Card>
-      ) : null}
+      {tab === 'health' ? <HealthTab plantId={id} plantName={plant.name} today={detail.today} /> : null}
 
-      {tab === 'notes' ? (
-        <Card>
-          <EmptyState title="Notas y fotos" message="Aquí podrás guardar notas y fotos de su evolución (fase 6)." />
-        </Card>
-      ) : null}
+      {tab === 'notes' ? <NotesTab plantId={id} /> : null}
 
       {tab === 'info' ? (
         species?.profile ? (
@@ -221,6 +239,20 @@ export default function PlantScreen() {
           setSnoozing(false);
           void run('water', () => snoozeWatering(id, days));
         }}
+      />
+
+      <ActionSheet
+        visible={photoSheet}
+        title={`Foto de ${plant.name}`}
+        message="Haz una foto de tu planta para reconocerla de un vistazo en tu jardín."
+        onClose={() => setPhotoSheet(false)}
+        actions={[
+          { label: '📷 Hacer una foto', onPress: () => void changePhoto('camera') },
+          { label: '🖼 Elegir de la galería', onPress: () => void changePhoto('library') },
+          ...(ownPhoto
+            ? [{ label: 'Volver a la foto de la especie', destructive: true, onPress: () => void run('photo', () => removePlantPhoto(id)) }]
+            : []),
+        ]}
       />
 
       <Modal visible={renaming} transparent animationType="fade" onRequestClose={() => setRenaming(false)}>
@@ -273,6 +305,17 @@ const styles = StyleSheet.create({
   },
   hero: { width: '100%', aspectRatio: 4 / 3, borderRadius: radius.lg, backgroundColor: colors.parchmentDeep },
   heroEmpty: { alignItems: 'center', justifyContent: 'center' },
+  photoButton: {
+    position: 'absolute',
+    right: space.sm,
+    bottom: space.sm,
+    backgroundColor: 'rgba(52,71,42,0.85)',
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   flex: { flex: 1 },
   editButton: { padding: space.sm, marginTop: space.sm },

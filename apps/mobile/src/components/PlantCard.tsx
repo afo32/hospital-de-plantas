@@ -1,5 +1,6 @@
 import type { PlantSummary } from '@hdp/shared';
 import { Image } from 'expo-image';
+import { imageSource } from '@/lib/media';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { waterLabel } from '@/lib/dates';
 import { cardShadow, colors, radius, space } from '@/theme/tokens';
@@ -18,7 +19,7 @@ export function PlantCard({ plant, onPress }: { plant: PlantSummary; onPress: ()
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       {plant.imageUrl ? (
-        <Image source={{ uri: plant.imageUrl }} style={styles.image} contentFit="cover" transition={200} />
+        <Image source={imageSource(plant.imageUrl)} style={styles.image} contentFit="cover" transition={200} />
       ) : (
         <View style={[styles.image, styles.placeholder]}>
           <SproutIcon color={colors.fern} size={44} />

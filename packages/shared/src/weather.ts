@@ -73,6 +73,8 @@ export const remindersSchema = z.object({
       water: z.array(z.string()),
       fertilize: z.array(z.string()),
       repot: z.array(z.string()),
+      /** Plantas con revisión de salud pendiente ese día */
+      checkup: z.array(z.string()).default([]),
     }),
   ),
   /** Alertas de clima: se avisan la tarde anterior */
