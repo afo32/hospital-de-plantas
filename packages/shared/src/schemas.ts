@@ -100,7 +100,13 @@ export const publicUserSchema = z.object({
   email: z.string(),
   name: z.string().nullable(),
   city: z.string().nullable(),
+  lat: z.number().nullable(),
+  lon: z.number().nullable(),
+  timezone: z.string(),
   reminderHour: z.number().int(),
+  notifyWater: z.boolean(),
+  notifyCare: z.boolean(),
+  notifyWeather: z.boolean(),
   defaultGardenId: z.uuid().nullable(),
 });
 export type PublicUser = z.infer<typeof publicUserSchema>;
@@ -115,10 +121,23 @@ export const refreshSchema = z.object({
 });
 export type RefreshInput = z.infer<typeof refreshSchema>;
 
-export const updateMeSchema = z.object({
-  name: z.string().trim().min(1).max(60).optional(),
-  reminderHour: z.number().int().min(0).max(23).optional(),
-});
+export const updateMeSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60).optional(),
+    reminderHour: z.number().int().min(0).max(23).optional(),
+    notifyWater: z.boolean().optional(),
+    notifyCare: z.boolean().optional(),
+    notifyWeather: z.boolean().optional(),
+    /** Ubicación: se guarda redondeada a ~1 km (no hace falta más para el clima) */
+    lat: z.number().min(-90).max(90).nullable().optional(),
+    lon: z.number().min(-180).max(180).nullable().optional(),
+    city: z.string().trim().max(80).nullable().optional(),
+    timezone: z.string().max(60).optional(),
+  })
+  .refine((v) => (v.lat === undefined) === (v.lon === undefined), {
+    message: 'Envía latitud y longitud juntas',
+    path: ['lat'],
+  });
 export type UpdateMeInput = z.infer<typeof updateMeSchema>;
 
 /** Forma de los errores del API: `message` listo para mostrar al usuario. */

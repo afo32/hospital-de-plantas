@@ -122,3 +122,81 @@ describe('motor de cuidado', () => {
     expect(plan.water.factors.join(' ')).toContain('reposo');
   });
 });
+
+describe('clima', () => {
+  const weather = (days: [number, number, number?][], today = '2026-06-10') => ({
+    place: 'Madrid',
+    fetchedAt: '2026-06-10T08:00:00Z',
+    current: { tempC: days[0]![1] - 3, humidityPct: 40, weatherCode: 0, isDay: true },
+    days: days.map(([min, max, rain = 0], i) => ({
+      day: addDays(today, i),
+      minC: min,
+      maxC: max,
+      rainMm: rain,
+      uvMax: 5,
+      weatherCode: 0,
+    })),
+  });
+  const outdoor = { ...base().plant, location: 'outdoor' };
+
+  it('sin datos del tiempo no da veredicto', () => {
+    expect(computeCarePlan(base()).climate).toBeNull();
+  });
+
+  it('noche fría (8 °C) y día templado → fuera de día, dentro de noche', () => {
+    const plan = computeCarePlan(base({ plant: outdoor, weather: weather([[10, 22], [8, 21], [12, 24]]) }));
+    expect(plan.climate?.verdict).toBe('day_out_night_in');
+    expect(plan.climate?.alerts[0]?.message).toContain('8 °C');
+  });
+
+  it('día frío (máx. 9 °C) → mejor dentro', () => {
+    const plan = computeCarePlan(base({ plant: outdoor, today: '2026-01-10', weather: weather([[2, 9], [1, 8]], '2026-01-10') }));
+    expect(plan.climate?.verdict).toBe('keep_inside');
+  });
+
+  it('temperaturas en rango → bien fuera', () => {
+    const plan = computeCarePlan(base({ plant: outdoor, weather: weather([[16, 26], [17, 27], [16, 25]]) }));
+    expect(plan.climate?.verdict).toBe('ok_outside');
+    expect(plan.climate?.alerts).toHaveLength(0);
+  });
+
+  it('calor extremo → sombra y riego más frecuente', () => {
+    const plan = computeCarePlan(base({ plant: outdoor, weather: weather([[22, 36], [23, 37], [22, 35]]) }));
+    expect(plan.climate?.verdict).toBe('shade_midday');
+    expect(plan.water.factors.join(' ')).toContain('Calor');
+  });
+
+  it('lluvia hoy en planta de exterior que toca regar → sugiere saltarse el riego', () => {
+    const plan = computeCarePlan(
+      base({ plant: outdoor, lastWaterDay: '2026-06-01', weather: weather([[16, 24, 12], [16, 25]]) }),
+    );
+    expect(plan.suggestions.join(' ')).toContain('lluvia');
+  });
+
+  it('planta de interior con buen tiempo fuera → bien dentro (podría salir)', () => {
+    const plan = computeCarePlan(base({ weather: weather([[18, 26], [17, 27]]) }));
+    expect(plan.climate?.verdict).toBe('indoor_ok');
+    expect(plan.climate?.message).toContain('podría estar en el exterior');
+  });
+});
+
+describe('clima en interior', () => {
+  it('planta de interior con noche fría → bien dentro, no sacarla', () => {
+    const plan = computeCarePlan(
+      base({
+        weather: {
+          place: null,
+          fetchedAt: '',
+          current: { tempC: 12, humidityPct: 50, weatherCode: 0, isDay: true },
+          days: [
+            { day: '2026-06-10', minC: 3, maxC: 15, rainMm: 0, uvMax: 3, weatherCode: 0 },
+            { day: '2026-06-11', minC: 2, maxC: 14, rainMm: 0, uvMax: 3, weatherCode: 0 },
+          ],
+        },
+      }),
+    );
+    expect(plan.climate?.verdict).toBe('indoor_ok');
+    expect(plan.climate?.message).toContain('demasiado frío');
+    expect(plan.climate?.alerts).toHaveLength(0);
+  });
+});

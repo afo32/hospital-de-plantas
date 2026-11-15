@@ -7,3 +7,4 @@ export * from './catalog.js';
 export * from './schemas.js';
 export * from './species.js';
 export * from './garden.js';
+export * from './weather.js';

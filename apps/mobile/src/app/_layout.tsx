@@ -9,7 +9,12 @@ import { DefaultTheme, ThemeProvider } from 'expo-router';
 import { Stack } from 'expo-router/stack';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import NetInfo from '@react-native-community/netinfo';
+import * as Notifications from 'expo-notifications';
+import { router } from 'expo-router';
 import { useEffect } from 'react';
+import { AppState, Platform } from 'react-native';
+import { flushQueue } from '@/lib/offline';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { OfflineScreen } from '@/components/OfflineScreen';
 import { colors, fonts } from '@/theme/tokens';
@@ -60,6 +65,28 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
     if (ready) SplashScreen.hideAsync();
   }, [ready]);
 
+  // Con sesión: envía lo guardado sin conexión al volver la red o al volver a la app.
+  useEffect(() => {
+    if (status !== 'signedIn') return;
+    void flushQueue();
+    const unsubNet = NetInfo.addEventListener((s) => {
+      if (s.isConnected) void flushQueue();
+    });
+    const subApp = AppState.addEventListener('change', (st) => {
+      if (st === 'active') void flushQueue();
+    });
+    // Al tocar un aviso, abre Mi jardín.
+    const subNotif =
+      Platform.OS === 'web'
+        ? null
+        : Notifications.addNotificationResponseReceivedListener(() => router.navigate('/'));
+    return () => {
+      unsubNet();
+      subApp.remove();
+      subNotif?.remove();
+    };
+  }, [status]);
+
   if (!ready) return null;
   if (status === 'offline') return <OfflineScreen onRetry={retry} onSignOut={signOut} />;
 
@@ -81,6 +108,7 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
         <Stack.Screen name="species/[id]" options={{ title: '', headerBackTitle: 'Volver' }} />
         <Stack.Screen name="plant-setup/[speciesId]" options={{ title: 'Añadir planta' }} />
         <Stack.Screen name="plant/[id]" options={{ title: '', headerBackTitle: 'Volver' }} />
+        <Stack.Screen name="light-meter" options={{ title: 'Medidor de luz' }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn} redirectTo="/">
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />

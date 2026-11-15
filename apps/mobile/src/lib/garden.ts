@@ -6,19 +6,34 @@ import {
   type PlantDetail,
   plantListSchema,
   type PlantSummary,
+  remindersSchema,
+  type Reminders,
   type TaskType,
   todaySchema,
   type TodayResponse,
   type UpdatePlantInput,
 } from '@hdp/shared';
 import { api } from './api';
+import { type Cached, runOrQueue, withCache } from './offline';
 
-export async function getToday(gardenId: string): Promise<TodayResponse> {
-  return todaySchema.parse(await api(`/gardens/${gardenId}/today`));
+/** Día local de hoy en el móvil (para acciones sin conexión). */
+export function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export async function getPlants(gardenId: string): Promise<PlantSummary[]> {
-  return plantListSchema.parse(await api(`/gardens/${gardenId}/plants`)).plants;
+export function getToday(gardenId: string): Promise<Cached<TodayResponse>> {
+  return withCache(`today.${gardenId}`, async () => todaySchema.parse(await api(`/gardens/${gardenId}/today`)));
+}
+
+export function getPlants(gardenId: string): Promise<Cached<PlantSummary[]>> {
+  return withCache(`plants.${gardenId}`, async () =>
+    plantListSchema.parse(await api(`/gardens/${gardenId}/plants`)).plants,
+  );
+}
+
+export async function getReminders(gardenId: string): Promise<Reminders> {
+  return remindersSchema.parse(await api(`/gardens/${gardenId}/reminders`));
 }
 
 export async function addPlant(gardenId: string, input: AddPlantInput): Promise<PlantDetail> {
@@ -30,8 +45,8 @@ export async function completeAll(gardenId: string): Promise<number> {
   return r.completed;
 }
 
-export async function getPlant(id: string): Promise<PlantDetail> {
-  return plantDetailSchema.parse(await api(`/plants/${id}`));
+export function getPlant(id: string): Promise<Cached<PlantDetail>> {
+  return withCache(`plant.${id}`, async () => plantDetailSchema.parse(await api(`/plants/${id}`)));
 }
 
 export async function updatePlant(id: string, input: UpdatePlantInput): Promise<PlantDetail> {
@@ -42,16 +57,24 @@ export async function removePlant(id: string): Promise<void> {
   await api(`/plants/${id}`, { method: 'DELETE' });
 }
 
-export async function completeTask(id: string, type: TaskType): Promise<PlantDetail> {
-  return plantDetailSchema.parse(await api(`/plants/${id}/complete`, { method: 'POST', body: { type } }));
+/* Estas tres funcionan también sin conexión: se guardan y se envían luego (lanzan QueuedOffline). */
+
+export function completeTask(id: string, type: TaskType): Promise<PlantDetail> {
+  return runOrQueue({ kind: 'complete', plantId: id, type, day: localToday() }, async () =>
+    plantDetailSchema.parse(await api(`/plants/${id}/complete`, { method: 'POST', body: { type } })),
+  );
 }
 
-export async function undoTask(id: string, type: TaskType): Promise<PlantDetail> {
-  return plantDetailSchema.parse(await api(`/plants/${id}/complete/${type}`, { method: 'DELETE' }));
+export function undoTask(id: string, type: TaskType): Promise<PlantDetail> {
+  return runOrQueue({ kind: 'undo', plantId: id, type, day: localToday() }, async () =>
+    plantDetailSchema.parse(await api(`/plants/${id}/complete/${type}`, { method: 'DELETE' })),
+  );
 }
 
-export async function snoozeWatering(id: string, days: number): Promise<PlantDetail> {
-  return plantDetailSchema.parse(await api(`/plants/${id}/snooze`, { method: 'POST', body: { days } }));
+export function snoozeWatering(id: string, days: number): Promise<PlantDetail> {
+  return runOrQueue({ kind: 'snooze', plantId: id, days, day: localToday() }, async () =>
+    plantDetailSchema.parse(await api(`/plants/${id}/snooze`, { method: 'POST', body: { days } })),
+  );
 }
 
 export async function getCalendar(id: string, from: string, to: string): Promise<CalendarResponse> {

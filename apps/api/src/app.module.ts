@@ -6,6 +6,7 @@ import { GardenModule } from './garden/garden.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { SpeciesModule } from './species/species.module.js';
+import { WeatherModule } from './weather/weather.module.js';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { SpeciesModule } from './species/species.module.js';
       errorMessage: 'Demasiados intentos. Espera un minuto y vuelve a probar.',
     }),
     PrismaModule,
+    WeatherModule,
     HealthModule,
     AuthModule,
     SpeciesModule,

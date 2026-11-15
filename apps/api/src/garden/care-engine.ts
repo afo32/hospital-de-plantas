@@ -1,4 +1,4 @@
-import type { CarePlan, SpeciesCare } from '@hdp/shared';
+import type { CarePlan, Climate, SpeciesCare, Weather } from '@hdp/shared';
 import { addDays, diffDays, maxDay, minDay, monthName, monthOf, nextMonthStart } from '../common/days.js';
 
 /**
@@ -33,6 +33,9 @@ export type EngineInput = {
   southern: boolean;
   /** Últimos eventos de riego/pospuesto, del más reciente al más antiguo */
   recentWaterEvents: ('water' | 'snooze')[];
+  /** Tiempo de la zona del usuario (null si no ha indicado ubicación o no hay datos) */
+  weather?: Weather | null;
+  plantName?: string;
 };
 
 const LIGHT_FACTOR: Record<string, [number, string]> = {
@@ -101,6 +104,15 @@ export function computeWater(input: EngineInput) {
   ] as [number, string][]) {
     days *= factor;
     if (label) factors.push(label);
+  }
+  // Calor fuerte los próximos 3 días en plantas que están fuera: se seca mucho antes.
+  if (input.weather && plant.location !== 'indoor') {
+    const next = input.weather.days.filter((d) => d.day >= today).slice(0, 3);
+    const avgMax = next.reduce((sum, d) => sum + d.maxC, 0) / Math.max(1, next.length);
+    if (next.length && avgMax > 30) {
+      days *= 0.7;
+      factors.push(`Calor fuerte (${Math.round(avgMax)} °C): riego más frecuente`);
+    }
   }
   const sizeFactor = Math.sqrt(Math.max(plant.potDiameterCm, 5) / 15);
   days *= sizeFactor;
@@ -245,6 +257,80 @@ export function computeRepot(input: EngineInput, pot: CarePlan['pot']): CarePlan
   return { everyMonths, lastDay: input.lastRepotDay, nextDay: next, note };
 }
 
+const r = (n: number) => Math.round(n);
+
+/** Interior, exterior, o fuera de día y dentro de noche, según el tiempo de hoy y la tolerancia de la especie. */
+export function computeClimate(input: EngineInput): Climate | null {
+  const { weather, care, plant, today } = input;
+  if (!weather) return null;
+  const todayW = weather.days.find((d) => d.day === today) ?? weather.days[0];
+  const tomorrow = weather.days.find((d) => d.day > (todayW?.day ?? today));
+  if (!todayW) return null;
+
+  const nowC = weather.current.tempC;
+  const maxC = todayW.maxC;
+  // La mínima de "esta noche" es la de la madrugada siguiente.
+  const nightC = Math.min(tomorrow?.minC ?? todayW.minC, todayW.minC);
+  const frost = nightC <= 0 && !care.frostTolerant;
+  const base = { nowC, todayMaxC: maxC, tonightMinC: nightC, place: weather.place };
+  const outside = plant.location !== 'indoor';
+  const name = input.plantName ?? 'la planta';
+
+  // Avisos de los próximos 6 días para plantas que están fuera.
+  const alerts: Climate['alerts'] = [];
+  if (outside) {
+    const days = weather.days.filter((d) => d.day >= today).slice(0, 7);
+    for (let i = 0; i < days.length - 1; i++) {
+      const d = days[i]!;
+      const night = days[i + 1]!.minC;
+      if (night < care.tempMinC || (night <= 0 && !care.frostTolerant)) {
+        alerts.push({
+          day: d.day,
+          message: `Esta noche ${r(night)} °C: mete ${name} dentro (aguanta hasta ${care.tempMinC} °C).`,
+        });
+      } else if (d.maxC > care.tempMaxC) {
+        alerts.push({ day: d.day, message: `${r(d.maxC)} °C: pon ${name} a la sombra en las horas centrales.` });
+      }
+    }
+  }
+
+  let verdict: Climate['verdict'];
+  let title: string;
+  let message: string;
+  const range = `entre ${care.tempMinC} y ${care.tempMaxC} °C (ideal ${care.tempIdealMinC}–${care.tempIdealMaxC} °C)`;
+
+  if (!outside) {
+    verdict = 'indoor_ok';
+    title = 'Bien dentro de casa';
+    message =
+      nightC >= care.tempMinC + 2 && maxC <= care.tempIdealMaxC + 3 && !frost
+        ? `Fuera hoy ${r(nightC)}–${r(maxC)} °C: podría estar en el exterior si le das la luz que necesita.`
+        : nightC < care.tempMinC || frost
+          ? `Fuera hoy ${r(nightC)}–${r(maxC)} °C: demasiado frío para sacarla. Dentro, mantenla ${range}, lejos de radiadores y corrientes.`
+          : `Fuera hoy ${r(nightC)}–${r(maxC)} °C. Dentro, mantenla ${range}.`;
+  } else if (maxC < care.tempMinC || (frost && maxC < care.tempIdealMinC)) {
+    verdict = 'keep_inside';
+    title = 'Hoy, mejor dentro';
+    message = `Fuera no pasará de ${r(maxC)} °C${frost ? ' y helará' : ''}; ${name} vive bien ${range}.`;
+  } else if (nightC < care.tempMinC || frost) {
+    verdict = 'day_out_night_in';
+    title = 'Fuera de día, dentro de noche';
+    message = `De día llegará a ${r(maxC)} °C, pero esta noche bajará a ${r(nightC)} °C. Si está fuera, métela al atardecer.`;
+  } else if (maxC > care.tempMaxC || (todayW.uvMax >= 8 && care.luxMax <= 20_000)) {
+    verdict = 'shade_midday';
+    title = 'Sombra en las horas centrales';
+    message =
+      maxC > care.tempMaxC
+        ? `Hoy ${r(maxC)} °C: por encima de lo que aguanta (${care.tempMaxC} °C). Sombra y riego temprano.`
+        : `Índice UV ${r(todayW.uvMax)}: el sol de mediodía puede quemar sus hojas.`;
+  } else {
+    verdict = 'ok_outside';
+    title = 'Hoy está bien fuera';
+    message = `Entre ${r(nightC)} y ${r(maxC)} °C: dentro de lo que tolera (${care.tempMinC}–${care.tempMaxC} °C).`;
+  }
+  return { verdict, title, message, ...base, alerts };
+}
+
 /** Plan completo de cuidado de una planta. */
 export function computeCarePlan(input: EngineInput): CarePlan {
   const water = computeWater(input);
@@ -264,10 +350,14 @@ export function computeCarePlan(input: EngineInput): CarePlan {
   if (input.care.luxMax <= 10_000 && input.plant.lightLevel === 'full_sun') {
     suggestions.push('El sol directo todo el día puede quemar sus hojas: mejor luz filtrada o semisombra.');
   }
+  const rainToday = input.weather?.days.find((d) => d.day === input.today)?.rainMm ?? 0;
+  if (input.plant.location === 'outdoor' && rainToday >= 5 && water.nextDay <= input.today) {
+    suggestions.push(`Hoy se esperan ${Math.round(rainToday)} mm de lluvia: si está al descubierto, puedes saltarte el riego.`);
+  }
   if (input.lastWaterDay && diffDays(input.lastWaterDay, input.today) > water.everyDays * 2) {
     suggestions.push('Hace mucho que no se riega: comprueba la humedad antes y, si está muy seca, riega en dos tandas.');
   }
 
   const { volumeL: _v, ...waterPlan } = water;
-  return { water: waterPlan, fertilize, repot, pot, suggestions };
+  return { water: waterPlan, fertilize, repot, pot, climate: computeClimate(input), suggestions };
 }

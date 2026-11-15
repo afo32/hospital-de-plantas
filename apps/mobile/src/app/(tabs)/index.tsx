@@ -1,9 +1,10 @@
-import type { PlantSummary, Task, TodayResponse } from '@hdp/shared';
+import type { PlantSummary, Reminders, Task, TodayResponse, Weather } from '@hdp/shared';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useAuth } from '@/auth/AuthProvider';
 import { AppText } from '@/components/AppText';
+import { Banner } from '@/components/Banner';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { Fab } from '@/components/Fab';
@@ -12,7 +13,11 @@ import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { SnoozeSheet } from '@/components/SnoozeSheet';
 import { TaskRow } from '@/components/TaskRow';
 import { VineDivider } from '@/components/VineDivider';
-import { completeAll, completeTask, getPlants, getToday, snoozeWatering, undoTask } from '@/lib/garden';
+import { WeatherStrip } from '@/components/WeatherStrip';
+import { completeAll, completeTask, getPlants, getReminders, getToday, snoozeWatering, undoTask } from '@/lib/garden';
+import { ensureNotificationPermission, syncReminders } from '@/lib/notifications';
+import { flushQueue, pendingCount, QueuedOffline } from '@/lib/offline';
+import { getWeather } from '@/lib/weather';
 import { colors, space } from '@/theme/tokens';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -37,14 +42,33 @@ export default function GardenScreen() {
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [completingAll, setCompletingAll] = useState(false);
   const [snoozeFor, setSnoozeFor] = useState<Task | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [pending, setPending] = useState(0);
+  const [weather, setWeather] = useState<Weather | null>(null);
+  const [alerts, setAlerts] = useState<Reminders['alerts']>([]);
+  const [notifAsk, setNotifAsk] = useState(false);
 
   const load = useCallback(async () => {
     if (!gardenId) return;
     try {
+      await flushQueue();
       const [t, p] = await Promise.all([getToday(gardenId), getPlants(gardenId)]);
-      setToday(t);
-      setPlants(p);
+      setToday(t.data);
+      setPlants(p.data);
+      setOffline(t.offline || p.offline);
       setError('');
+      setPending(await pendingCount());
+      if (!t.offline) {
+        // Extras: tiempo, alertas de hoy y reprogramar avisos. Si fallan, no pasa nada.
+        getWeather()
+          .then((w) => setWeather(w.data))
+          .catch(() => undefined);
+        getReminders(gardenId)
+          .then((r) => setAlerts(r.alerts.filter((a) => a.day === t.data.today)))
+          .catch(() => undefined);
+        void syncReminders(gardenId).catch(() => undefined);
+        if (Platform.OS !== 'web') ensureNotificationPermission(false).then((ok) => setNotifAsk(!ok));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar tu jardín');
     }
@@ -63,13 +87,30 @@ export default function GardenScreen() {
     setRefreshing(false);
   };
 
-  const withBusy = async (key: string, action: () => Promise<unknown>) => {
+  /** Cambio local inmediato cuando no hay red (la acción queda en la cola). */
+  const applyOffline = (t: Task, change: 'toggle' | 'snooze') => {
+    setToday(
+      (prev) =>
+        prev && {
+          ...prev,
+          tasks:
+            change === 'snooze'
+              ? prev.tasks.filter((x) => taskKey(x) !== taskKey(t))
+              : prev.tasks.map((x) => (taskKey(x) === taskKey(t) ? { ...x, done: !x.done, doneBy: null } : x)),
+        },
+    );
+    setOffline(true);
+    setPending((n) => n + 1);
+  };
+
+  const withBusy = async (key: string, action: () => Promise<unknown>, onQueued?: () => void) => {
     setBusy((b) => new Set(b).add(key));
     try {
       await action();
       await load();
     } catch (err) {
-      Alert.alert('No se pudo guardar', err instanceof Error ? err.message : 'Inténtalo de nuevo.');
+      if (err instanceof QueuedOffline) onQueued?.();
+      else Alert.alert('No se pudo guardar', err instanceof Error ? err.message : 'Inténtalo de nuevo.');
     } finally {
       setBusy((b) => {
         const n = new Set(b);
@@ -80,12 +121,27 @@ export default function GardenScreen() {
   };
 
   const toggle = (t: Task) =>
-    withBusy(taskKey(t), () => (t.done ? undoTask(t.plantId, t.type) : completeTask(t.plantId, t.type)));
+    withBusy(
+      taskKey(t),
+      () => (t.done ? undoTask(t.plantId, t.type) : completeTask(t.plantId, t.type)),
+      () => applyOffline(t, 'toggle'),
+    );
 
   const snooze = (days: number) => {
     const t = snoozeFor;
     setSnoozeFor(null);
-    if (t) void withBusy(taskKey(t), () => snoozeWatering(t.plantId, days));
+    if (t)
+      void withBusy(
+        taskKey(t),
+        () => snoozeWatering(t.plantId, days),
+        () => applyOffline(t, 'snooze'),
+      );
+  };
+
+  const askNotifications = async () => {
+    const ok = await ensureNotificationPermission(true);
+    setNotifAsk(!ok);
+    if (ok && gardenId) await syncReminders(gardenId).catch(() => undefined);
   };
 
   const doCompleteAll = async () => {
@@ -146,6 +202,39 @@ export default function GardenScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.moss} />}
       >
+        {offline ? (
+          <Banner tone="warning" title="Sin conexión">
+            <AppText variant="small" color={colors.berry}>
+              Estás viendo los últimos datos guardados.
+              {pending
+                ? ` ${pending} ${pending === 1 ? 'cambio se enviará' : 'cambios se enviarán'} al volver la red.`
+                : ''}
+            </AppText>
+          </Banner>
+        ) : null}
+
+        {alerts.map((a) => (
+          <Banner key={a.body} tone="warning" title={a.title}>
+            <AppText color={colors.berry}>{a.body}</AppText>
+          </Banner>
+        ))}
+
+        {weather && tab === 'today' ? <WeatherStrip weather={weather} /> : null}
+
+        {today && !offline && user && user.lat == null && plants?.length ? (
+          <Banner title="¿Dónde viven tus plantas?">
+            <AppText>Indica tu ubicación para saber si pueden estar fuera y avisarte de heladas.</AppText>
+            <Button label="Indicar ubicación" variant="outline" onPress={() => router.push('/profile')} />
+          </Banner>
+        ) : null}
+
+        {notifAsk && plants?.length ? (
+          <Banner title="Activa los avisos">
+            <AppText>Te avisaremos el día que toque regar, abonar o trasplantar, y si va a helar.</AppText>
+            <Button label="Activar avisos" variant="outline" onPress={askNotifications} />
+          </Banner>
+        ) : null}
+
         {loading ? <ActivityIndicator color={colors.moss} style={styles.loader} /> : null}
         {error ? (
           <View style={styles.group}>

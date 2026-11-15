@@ -13,6 +13,7 @@ import {
   type SnoozeInput,
   TASK_TYPES,
   type TaskType,
+  type Reminders,
   type TodayResponse,
   updatePlantSchema,
   type UpdatePlantInput,
@@ -50,6 +51,12 @@ export class GardenController {
   @Get('today')
   today(@CurrentUserId() userId: string, @Param('gardenId', { schema: uuid }) gardenId: string): Promise<TodayResponse> {
     return this.garden.today(userId, gardenId);
+  }
+
+  /** Tareas de los próximos 14 días y alertas de clima, para programar los avisos locales del móvil. */
+  @Get('reminders')
+  reminders(@CurrentUserId() userId: string, @Param('gardenId', { schema: uuid }) gardenId: string): Promise<Reminders> {
+    return this.garden.reminders(userId, gardenId);
   }
 
   @Post('today/complete-all')
@@ -96,7 +103,7 @@ export class PlantsController {
     @Param('id', { schema: uuid }) id: string,
     @Body({ schema: completeTaskSchema }) body: CompleteTaskInput,
   ): Promise<PlantDetail> {
-    return this.garden.complete(userId, id, body.type);
+    return this.garden.complete(userId, id, body.type, body.day);
   }
 
   /** Deshacer la tarea marcada hoy. */

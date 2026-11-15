@@ -14,10 +14,13 @@ import {
   type TaskType,
   type TodayResponse,
   type UpdatePlantInput,
+  type Reminders,
+  type Weather,
 } from '@hdp/shared';
 import { addDays, dayToDate, diffDays, localDay, monthOf } from '../common/days.js';
 import type { CareEvent, Species, User, UserPlant } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { WeatherService } from '../weather/weather.service.js';
 import { computeCarePlan } from './care-engine.js';
 
 /** Cuántos días por delante se muestran en "Próximamente". */
@@ -25,18 +28,25 @@ const UPCOMING_DAYS = 7;
 const careSchema = speciesProfileSchema.shape.care;
 
 type PlantWithRelations = UserPlant & { species: Species; events: (CareEvent & { doneBy: { name: string | null } })[] };
-type Ctx = { user: User; today: string; tz: string; southern: boolean };
+type Ctx = { user: User; today: string; tz: string; southern: boolean; weather: Weather | null };
 
 @Injectable()
 export class GardenService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly weatherService: WeatherService,
+  ) {}
 
   /* ---------- Permisos y contexto ---------- */
 
   private async context(userId: string): Promise<Ctx> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const tz = user.timezone || 'Europe/Madrid';
-    return { user, tz, today: localDay(new Date(), tz), southern: (user.lat ?? 40) < 0 };
+    const weather =
+      user.lat != null && user.lon != null
+        ? await this.weatherService.forLocation(user.lat, user.lon, user.city).catch(() => null)
+        : null;
+    return { user, tz, today: localDay(new Date(), tz), southern: (user.lat ?? 40) < 0, weather };
   }
 
   /** Comprueba que el usuario es miembro del jardín (y que puede editar si `write`). */
@@ -91,6 +101,8 @@ export class GardenService {
       recentWaterEvents: plant.events
         .filter((e) => e.type === 'water' || e.type === 'snooze')
         .map((e) => e.type as 'water' | 'snooze'),
+      weather: ctx.weather,
+      plantName: plant.nickname ?? plant.species.commonNames[0] ?? plant.species.scientificName,
     });
   }
 
@@ -221,6 +233,7 @@ export class GardenService {
         overwateringGuard: plant.overwateringGuard,
         plantHeightCm: plant.plantHeightCm,
         plantWidthCm: plant.plantWidthCm,
+        lightLux: plant.lightLux,
         createdAt: plant.createdAt.toISOString(),
       },
       care: plan,
@@ -242,24 +255,33 @@ export class GardenService {
   /* ---------- Tareas ---------- */
 
   /** Marca una tarea como hecha hoy. Si otra persona del jardín ya la hizo, no la duplica. */
-  async complete(userId: string, plantId: string, type: TaskType): Promise<PlantDetail> {
+  async complete(userId: string, plantId: string, type: TaskType, day?: string): Promise<PlantDetail> {
     const plant = await this.loadPlant(userId, plantId, true);
     const ctx = await this.context(userId);
+    // Acciones guardadas sin conexión: se aceptan hasta 3 días atrás.
+    const taskDay = day && day <= ctx.today && diffDays(day, ctx.today) <= 3 ? day : ctx.today;
     try {
       await this.prisma.careEvent.create({
-        data: { plantId, type, taskDay: ctx.today, doneById: userId, ...(type === 'water' ? { amountMl: plant.waterAmountMl } : {}) },
+        data: {
+          plantId,
+          type,
+          taskDay,
+          doneAt: taskDay === ctx.today ? new Date() : dayToDate(taskDay),
+          doneById: userId,
+          ...(type === 'water' ? { amountMl: plant.waterAmountMl } : {}),
+        },
       });
     } catch (err) {
       if ((err as { code?: string }).code !== 'P2002') throw err; // ya estaba hecha hoy
     }
-    const now = new Date();
+    const when = taskDay === ctx.today ? new Date() : dayToDate(taskDay);
     await this.prisma.userPlant.update({
       where: { id: plantId },
       data:
         type === 'water'
-          ? { lastWateredAt: now, snoozedUntil: null }
+          ? { lastWateredAt: when, snoozedUntil: null }
           : type === 'repot'
-            ? { lastRepottedAt: now }
+            ? { lastRepottedAt: when }
             : {},
     });
     return this.getPlant(userId, plantId);
@@ -352,6 +374,73 @@ export class GardenService {
     return pending.length;
   }
 
+  /* ---------- Fechas futuras previstas ---------- */
+
+  /** Días previstos de riego, abono y trasplante entre `from` y `to` según el plan. */
+  private projectTasks(plant: PlantWithRelations, plan: CarePlan, ctx: Ctx, from: string, to: string) {
+    const care = this.careOf(plant.species);
+    const growing = ctx.southern ? care.growingMonths.map((m) => ((m + 5) % 12) + 1) : care.growingMonths;
+    const out: { day: string; type: TaskType }[] = [];
+    const inRange = (d: string) => d >= from && d <= to && d >= ctx.today;
+    for (let d = plan.water.nextDay, i = 0; d <= to && i < 200; d = addDays(d, plan.water.everyDays), i++) {
+      if (inRange(d)) out.push({ day: d, type: 'water' });
+    }
+    if (plan.fertilize.nextDay && plan.fertilize.everyDays) {
+      for (let d = plan.fertilize.nextDay, i = 0; d <= to && i < 100; d = addDays(d, plan.fertilize.everyDays), i++) {
+        if (inRange(d) && growing.includes(monthOf(d))) out.push({ day: d, type: 'fertilize' });
+      }
+    }
+    if (plan.repot.nextDay && inRange(plan.repot.nextDay)) out.push({ day: plan.repot.nextDay, type: 'repot' });
+    return out;
+  }
+
+  /* ---------- Recordatorios para los avisos locales del móvil ---------- */
+
+  /** Tareas de los próximos `days` días agrupadas por día, y alertas de clima. */
+  async reminders(userId: string, gardenId: string, days = 14): Promise<Reminders> {
+    await this.assertMember(userId, gardenId);
+    const ctx = await this.context(userId);
+    const to = addDays(ctx.today, days);
+    const plants = await this.plantsOfGarden(gardenId);
+    const byDay = new Map<string, { water: string[]; fertilize: string[]; repot: string[] }>();
+    const alerts = new Map<string, string[]>();
+
+    for (const p of plants) {
+      let plan: CarePlan;
+      try {
+        plan = this.plan(p, ctx);
+      } catch {
+        continue;
+      }
+      const name = p.nickname ?? p.species.commonNames[0] ?? p.species.scientificName;
+      const doneToday = new Set(p.events.filter((e) => e.taskDay === ctx.today).map((e) => e.type));
+      for (const t of this.projectTasks(p, plan, ctx, ctx.today, to)) {
+        if (t.day === ctx.today && doneToday.has(t.type)) continue;
+        const entry = byDay.get(t.day) ?? { water: [], fertilize: [], repot: [] };
+        entry[t.type].push(name);
+        byDay.set(t.day, entry);
+      }
+      for (const a of plan.climate?.alerts ?? []) {
+        alerts.set(a.day, [...(alerts.get(a.day) ?? []), a.message]);
+      }
+    }
+
+    return {
+      reminderHour: ctx.user.reminderHour,
+      notifyWater: ctx.user.notifyWater,
+      notifyCare: ctx.user.notifyCare,
+      notifyWeather: ctx.user.notifyWeather,
+      days: [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, v]) => ({ day, ...v })),
+      alerts: [...alerts.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([day, messages]) => ({
+          day,
+          title: messages.length > 1 ? `Aviso de clima para ${messages.length} plantas` : 'Aviso de clima',
+          body: messages.join('\n'),
+        })),
+    };
+  }
+
   /* ---------- Calendario ---------- */
 
   async calendar(userId: string, plantId: string, from: string, to: string): Promise<CalendarResponse> {
@@ -380,21 +469,10 @@ export class GardenService {
     }
 
     // Futuro: lo previsto por el plan, repitiendo cada N días.
-    const care = this.careOf(plant.species);
-    const growing = ctx.southern ? care.growingMonths.map((m) => ((m + 5) % 12) + 1) : care.growingMonths;
     const doneToday = (type: TaskType) => history.some((e) => e.type === type && e.taskDay === ctx.today);
-
-    for (let d = plan.water.nextDay, i = 0; d <= to && i < 200; d = addDays(d, plan.water.everyDays), i++) {
-      if (d >= ctx.today && !(d === ctx.today && doneToday('water'))) push(d, 'water', 'planned');
+    for (const t of this.projectTasks(plant, plan, ctx, from, to)) {
+      if (!(t.day === ctx.today && doneToday(t.type))) push(t.day, t.type, 'planned');
     }
-    if (plan.fertilize.nextDay && plan.fertilize.everyDays) {
-      for (let d = plan.fertilize.nextDay, i = 0; d <= to && i < 100; d = addDays(d, plan.fertilize.everyDays), i++) {
-        if (d >= ctx.today && growing.includes(monthOf(d)) && !(d === ctx.today && doneToday('fertilize'))) {
-          push(d, 'fertilize', 'planned');
-        }
-      }
-    }
-    if (plan.repot.nextDay && plan.repot.nextDay >= ctx.today) push(plan.repot.nextDay, 'repot', 'planned');
 
     items.sort((a, b) => a.day.localeCompare(b.day));
     return { from, to, items };

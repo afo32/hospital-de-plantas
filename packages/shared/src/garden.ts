@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { speciesSummarySchema } from './species.js';
+import { climateSchema } from './weather.js';
 
 /** Fechas de calendario sin hora, en la zona horaria del usuario: "2026-11-15". */
 export const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha no válida');
@@ -51,7 +52,9 @@ export const carePlanSchema = z.object({
     volumeL: z.number(),
     recommendedDiameterCm: z.number().nullable(),
   }),
-  /** Consejos extra: "Has pospuesto 2 veces seguidas: ¿alargamos el riego a 9 días?" */
+  /** Interior/exterior según el tiempo de tu zona (null si no hay datos del tiempo) */
+  climate: climateSchema.nullable(),
+  /** Consejos extra: "Has pospuesto 2 veces seguidas…", "Hoy llueve: no hace falta regar…" */
   suggestions: z.array(z.string()),
 });
 export type CarePlan = z.infer<typeof carePlanSchema>;
@@ -90,6 +93,7 @@ export const plantDetailSchema = z.object({
     overwateringGuard: z.array(z.string()),
     plantHeightCm: z.number().nullable(),
     plantWidthCm: z.number().nullable(),
+    lightLux: z.number().nullable(),
     createdAt: z.string(),
   }),
   care: carePlanSchema,
@@ -103,6 +107,7 @@ export const updatePlantSchema = z.object({
   room: z.string().trim().max(40).nullable().optional(),
   location: z.enum(['indoor', 'outdoor', 'indoor_night_outdoor_day']).optional(),
   lightLevel: z.enum(['full_sun', 'partial_sun', 'bright_indirect', 'low']).optional(),
+  lightLux: z.number().int().min(0).max(200_000).nullable().optional(),
   potShape: z.enum(['round', 'rectangular']).optional(),
   potDiameterCm: z.number().min(3).max(200).optional(),
   potHeightCm: z.number().min(3).max(200).optional(),
@@ -139,6 +144,8 @@ export type TodayResponse = z.infer<typeof todaySchema>;
 
 export const completeTaskSchema = z.object({
   type: z.enum(TASK_TYPES),
+  /** Día en que se hizo (para acciones guardadas sin conexión); por defecto, hoy */
+  day: daySchema.optional(),
 });
 export type CompleteTaskInput = z.infer<typeof completeTaskSchema>;
 

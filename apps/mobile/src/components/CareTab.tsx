@@ -1,4 +1,12 @@
-import { labelOf, POT_MATERIALS, type PlantDetail, type TaskType, type UpdatePlantInput } from '@hdp/shared';
+import {
+  labelOf,
+  LIGHT_LEVELS,
+  POT_MATERIALS,
+  type PlantDetail,
+  type TaskType,
+  type UpdatePlantInput,
+} from '@hdp/shared';
+import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { relativeDay, shortDate } from '@/lib/dates';
@@ -19,6 +27,7 @@ type Props = {
   onUndo: (type: TaskType) => void;
   onSnooze: () => void;
   onUpdate: (input: UpdatePlantInput) => Promise<void>;
+  onMeasureLight: () => void;
 };
 
 const num = (s: string) => {
@@ -27,18 +36,30 @@ const num = (s: string) => {
 };
 
 /** Pestaña "Cuidado": clima, riego, fertilización, trasplante, maceta y calendario. */
-export function CareTab({ detail, busy, calendarVersion, onComplete, onUndo, onSnooze, onUpdate }: Props) {
+export function CareTab({
+  detail,
+  busy,
+  calendarVersion,
+  onComplete,
+  onUndo,
+  onSnooze,
+  onUpdate,
+  onMeasureLight,
+}: Props) {
   const { care, plant, today } = detail;
   const doneToday = (type: TaskType, last: string | null) => last === today && !!type;
 
   return (
     <View style={styles.wrap}>
+      <ClimateCard detail={detail} />
+
       <Card>
-        <Title icon={<SunIcon color={colors.gold} />} text="Clima de tu zona" />
-        <AppText color={colors.barkSoft}>
-          Pronto te diré aquí si la temperatura de hoy le va bien dentro o fuera, y si conviene sacarla de día y meterla
-          de noche (fase 5).
+        <Title icon={<SunIcon color={colors.gold} />} text="Luz" />
+        <AppText>
+          {labelOf(LIGHT_LEVELS, plant.lightLevel)}
+          {plant.lightLux != null ? ` · medida: ${plant.lightLux.toLocaleString('es-ES')} lux` : ''}
         </AppText>
+        <Button label="Medir la luz de su sitio" variant="outline" onPress={onMeasureLight} />
       </Card>
 
       {care.suggestions.map((s) => (
@@ -155,6 +176,60 @@ export function CareTab({ detail, busy, calendarVersion, onComplete, onUndo, onS
       </AppText>
       <MonthCalendar plantId={plant.id} today={today} version={calendarVersion} />
     </View>
+  );
+}
+
+const CLIMATE_TONE: Record<string, string> = {
+  ok_outside: colors.moss,
+  indoor_ok: colors.moss,
+  day_out_night_in: colors.gold,
+  shade_midday: colors.ember,
+  keep_inside: colors.berry,
+};
+
+function ClimateCard({ detail }: { detail: PlantDetail }) {
+  const c = detail.care.climate;
+  if (!c) {
+    return (
+      <Card>
+        <Title icon={<SunIcon color={colors.gold} />} text="Clima de tu zona" />
+        <AppText color={colors.barkSoft}>
+          Indica dónde vives y te diré cada día si esta planta puede estar fuera, si conviene meterla de noche y te
+          avisaré de heladas.
+        </AppText>
+        <Button label="Indicar ubicación" variant="outline" onPress={() => router.push('/profile')} />
+      </Card>
+    );
+  }
+  const tone = CLIMATE_TONE[c.verdict] ?? colors.mossDeep;
+  return (
+    <Card>
+      <Title icon={<SunIcon color={tone} />} text={c.title} color={tone} />
+      <View style={styles.stats}>
+        {c.nowC != null ? <Stat label="Ahora" value={`${Math.round(c.nowC)} °C`} /> : null}
+        {c.todayMaxC != null ? <Stat label="Máx. hoy" value={`${Math.round(c.todayMaxC)} °C`} /> : null}
+        {c.tonightMinC != null ? (
+          <Stat
+            label="Esta noche"
+            value={`${Math.round(c.tonightMinC)} °C`}
+            highlight={c.verdict !== 'ok_outside' && c.verdict !== 'indoor_ok'}
+          />
+        ) : null}
+      </View>
+      <AppText>{c.message}</AppText>
+      {c.alerts.length ? (
+        <View style={styles.alerts}>
+          {c.alerts.slice(0, 4).map((a) => (
+            <AppText key={a.day} variant="small" color={colors.berry}>
+              {shortDate(a.day)}: {a.message}
+            </AppText>
+          ))}
+        </View>
+      ) : null}
+      <AppText variant="small" color={colors.barkSoft}>
+        {c.place ? `${c.place} · ` : ''}Datos del tiempo: Open-Meteo.com
+      </AppText>
+    </Card>
   );
 }
 
@@ -288,4 +363,5 @@ const styles = StyleSheet.create({
   suggestion: { backgroundColor: '#EEF2E4', borderColor: colors.fern },
   verdict: { borderLeftWidth: 3, paddingLeft: space.sm, paddingVertical: 2 },
   editor: { gap: space.sm },
+  alerts: { gap: 4 },
 });

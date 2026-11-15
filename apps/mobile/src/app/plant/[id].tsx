@@ -15,7 +15,9 @@ import { SpeciesProfileView } from '@/components/SpeciesProfileView';
 import { TextField } from '@/components/TextField';
 import { VineDivider } from '@/components/VineDivider';
 import { completeTask, getPlant, removePlant, snoozeWatering, undoTask, updatePlant } from '@/lib/garden';
+import { QueuedOffline } from '@/lib/offline';
 import { getSpeciesDetail } from '@/lib/species';
+import { Banner } from '@/components/Banner';
 import { colors, radius, space } from '@/theme/tokens';
 
 const TABS = [
@@ -38,11 +40,13 @@ export default function PlantScreen() {
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState('');
   const [calendarVersion, setCalendarVersion] = useState(0);
+  const [offline, setOffline] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const d = await getPlant(id);
+      const { data: d, offline } = await getPlant(id);
       setDetail(d);
+      setOffline(offline);
       setError('');
       if (d.plant.species.id)
         getSpeciesDetail(d.plant.species.id)
@@ -63,7 +67,12 @@ export default function PlantScreen() {
       setDetail(await action());
       setCalendarVersion((v) => v + 1);
     } catch (err) {
-      Alert.alert('No se pudo guardar', err instanceof Error ? err.message : 'Inténtalo de nuevo.');
+      if (err instanceof QueuedOffline) {
+        setOffline(true);
+        Alert.alert('Guardado sin conexión', err.message);
+      } else {
+        Alert.alert('No se pudo guardar', err instanceof Error ? err.message : 'Inténtalo de nuevo.');
+      }
     } finally {
       setBusy(null);
     }
@@ -157,6 +166,14 @@ export default function PlantScreen() {
         </Card>
       ) : null}
 
+      {offline ? (
+        <Banner tone="warning" title="Sin conexión">
+          <AppText variant="small" color={colors.berry}>
+            Datos guardados. Los cambios se enviarán al volver la red.
+          </AppText>
+        </Banner>
+      ) : null}
+
       <SegmentedTabs options={TABS} value={tab} onChange={setTab} />
 
       {tab === 'care' ? (
@@ -168,6 +185,7 @@ export default function PlantScreen() {
           onUndo={(t: TaskType) => run(t, () => undoTask(id, t))}
           onSnooze={() => setSnoozing(true)}
           onUpdate={onUpdate}
+          onMeasureLight={() => router.push({ pathname: '/light-meter', params: { plantId: id } })}
         />
       ) : null}
 

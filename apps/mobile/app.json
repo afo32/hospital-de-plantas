@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.hospitaldeplantas.app"
+      "package": "com.hospitaldeplantas.app",
+      "permissions": []
     },
     "web": {
       "output": "single",
@@ -41,6 +42,18 @@
           "cameraPermission": "Hospital de Plantas usa la cámara para identificar tus plantas y revisar su salud.",
           "photosPermission": "Hospital de Plantas usa tus fotos para identificar plantas y guardarlas en tus notas.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Hospital de Plantas usa tu ubicación aproximada para saber el tiempo de tu zona y si tus plantas pueden estar fuera."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#4F6B3A"
         }
       ]
     ],
