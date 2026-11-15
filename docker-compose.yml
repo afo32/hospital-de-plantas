@@ -1,0 +1,30 @@
+# Base de datos y Redis para desarrollo local.
+# Arranca con: npm run db:up
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hdp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hdp
+      POSTGRES_PASSWORD: hdp
+      POSTGRES_DB: hospital_plantas
+    ports:
+      - "5440:5432"
+    volumes:
+      - hdp-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hdp -d hospital_plantas"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: hdp-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  hdp-pgdata:

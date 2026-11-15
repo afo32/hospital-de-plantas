@@ -1,0 +1,251 @@
+// Esquema completo de Hospital de Plantas.
+// La URL de conexión está en prisma.config.ts (Prisma 7).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Persona usuaria de la app
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  /// null si solo entra con Google o Apple
+  passwordHash String?
+  name         String?
+  lat          Float?
+  lon          Float?
+  city         String?
+  timezone     String   @default("Europe/Madrid")
+  /// Hora local (0-23) del aviso diario de riego
+  reminderHour Int      @default(9)
+  notifyWater  Boolean  @default(true)
+  notifyCare   Boolean  @default(true)
+  notifyWeather Boolean @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  authAccounts  AuthAccount[]
+  refreshTokens RefreshToken[]
+  pushTokens    PushToken[]
+  memberships   GardenMember[]
+  careEvents    CareEvent[]
+  notes         Note[]
+  usage         ApiUsage[]
+}
+
+/// Cuenta social vinculada (Google o Apple)
+model AuthAccount {
+  id         String @id @default(uuid()) @db.Uuid
+  provider   String
+  providerId String
+  userId     String @db.Uuid
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PushToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Garden {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+
+  members GardenMember[]
+  plants  UserPlant[]
+  invites GardenInvite[]
+}
+
+model GardenMember {
+  gardenId String   @db.Uuid
+  userId   String   @db.Uuid
+  /// owner | editor | viewer
+  role     String
+  joinedAt DateTime @default(now())
+  garden   Garden   @relation(fields: [gardenId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([gardenId, userId])
+  @@index([userId])
+}
+
+model GardenInvite {
+  id         String    @id @default(uuid()) @db.Uuid
+  gardenId   String    @db.Uuid
+  code       String    @unique
+  role       String
+  expiresAt  DateTime
+  acceptedBy String?   @db.Uuid
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+  garden     Garden    @relation(fields: [gardenId], references: [id], onDelete: Cascade)
+}
+
+/// Ficha compartida de una especie (cacheada para todos los usuarios)
+model Species {
+  id             String   @id @default(uuid()) @db.Uuid
+  scientificName String   @unique
+  commonNames    String[]
+  family         String?
+  /// helechos, cactáceas, suculentas… (valores de PLANT_CATEGORIES)
+  category       String
+  imageUrl       String?
+  /// { plantnet, perenual, gbif, powo }
+  externalIds    Json     @default("{}")
+  /// Parámetros numéricos para el motor de cuidado
+  care           Json?
+  /// Ficha Info en español generada con IA
+  profileEs      Json?
+  profileVersion Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  plants UserPlant[]
+
+  @@index([category])
+}
+
+/// Una planta concreta de un jardín
+model UserPlant {
+  id                 String    @id @default(uuid()) @db.Uuid
+  gardenId           String    @db.Uuid
+  speciesId          String    @db.Uuid
+  nickname           String?
+  photoUrl           String?
+  /// indoor | outdoor | indoor_night_outdoor_day
+  location           String
+  room               String?
+  /// full_sun | partial_sun | bright_indirect | low
+  lightLevel         String
+  lightLux           Int?
+  /// round | rectangular
+  potShape           String    @default("round")
+  potDiameterCm      Float
+  potHeightCm        Float
+  potLengthCm        Float?
+  potMaterial        String?
+  hasDrainage        Boolean
+  soilType           String?
+  overwateringGuard  String[]
+  plantHeightCm      Float?
+  plantWidthCm       Float?
+  lastRepottedAt     DateTime?
+  lastWateredAt      DateTime?
+  waterEveryDays     Int
+  waterAmountMl      Int
+  fertilizeEveryDays Int?
+  repotEveryMonths   Int?
+  snoozedUntil       DateTime?
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  garden    Garden      @relation(fields: [gardenId], references: [id], onDelete: Cascade)
+  species   Species     @relation(fields: [speciesId], references: [id])
+  events    CareEvent[]
+  notes     Note[]
+  diagnoses Diagnosis[]
+
+  @@index([gardenId])
+}
+
+/// Riegos, pospuestos, fertilizaciones, trasplantes…
+model CareEvent {
+  id         String    @id @default(uuid()) @db.Uuid
+  plantId    String    @db.Uuid
+  /// water | fertilize | repot | prune | snooze | move_inside | move_outside
+  type       String
+  doneAt     DateTime  @default(now())
+  /// Día local de la tarea (para que completar sea idempotente en jardines compartidos)
+  taskDay    String?
+  doneById   String    @db.Uuid
+  snoozeDays Int?
+  amountMl   Int?
+  plant      UserPlant @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  doneBy     User      @relation(fields: [doneById], references: [id])
+
+  @@unique([plantId, type, taskDay])
+  @@index([plantId, type, doneAt])
+}
+
+model Note {
+  id        String    @id @default(uuid()) @db.Uuid
+  plantId   String    @db.Uuid
+  authorId  String    @db.Uuid
+  text      String?
+  photoUrls String[]
+  createdAt DateTime  @default(now())
+  plant     UserPlant @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+
+  @@index([plantId, createdAt])
+}
+
+model Diagnosis {
+  id         String    @id @default(uuid()) @db.Uuid
+  plantId    String    @db.Uuid
+  photoUrls  String[]
+  /// Respuestas al cuestionario
+  answers    Json      @default("[]")
+  /// Respuesta cruda de plant.health
+  apiResult  Json?
+  /// Diagnóstico final, causas y plan de tratamiento
+  result     Json?
+  /// in_progress | done | resolved
+  status     String    @default("in_progress")
+  followUpAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  plant      UserPlant @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@index([plantId, createdAt])
+}
+
+/// Clima cacheado por celda de ~10 km (lat/lon redondeadas a 0,1°)
+model WeatherCache {
+  id        String   @id @default(uuid()) @db.Uuid
+  latKey    Float
+  lonKey    Float
+  data      Json
+  fetchedAt DateTime
+
+  @@unique([latKey, lonKey])
+}
+
+/// Contador diario por usuario para limitar gasto en APIs de pago
+model ApiUsage {
+  userId String @db.Uuid
+  /// YYYY-MM-DD
+  day    String
+  /// identify | diagnose
+  kind   String
+  count  Int    @default(0)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day, kind])
+}
