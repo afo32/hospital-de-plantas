@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useAuth } from '@/auth/AuthProvider';
-import { GoogleCancelled, googleSupported, isExpoGo } from '@/auth/google';
+import { GoogleCancelled, googleNativeAvailable, googleSupported, isExpoGo } from '@/auth/google';
 import { api } from '@/lib/api';
 import { colors, space } from '@/theme/tokens';
 import { AppText } from './AppText';
@@ -26,9 +26,15 @@ export function GoogleSection({ onError }: Props) {
   }, []);
 
   if (!googleSupported || !serverEnabled) {
-    return __DEV__ && isExpoGo ? (
+    if (!__DEV__) return null;
+    const hint = isExpoGo
+      ? 'El acceso con Google aparece en la app de desarrollo, no en Expo Go.'
+      : !googleNativeAvailable
+        ? 'Esta build no incluye Google Sign-In. Vuelve a generarla con eas build.'
+        : null;
+    return hint ? (
       <AppText variant="small" color={colors.barkSoft} center>
-        El acceso con Google aparece en la app de desarrollo, no en Expo Go.
+        {hint}
       </AppText>
     ) : null;
   }

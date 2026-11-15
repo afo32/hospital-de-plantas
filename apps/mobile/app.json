@@ -34,22 +34,19 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 96
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Hospital de Plantas usa la cámara para identificar tus plantas y revisar su salud.",
+          "photosPermission": "Hospital de Plantas usa tus fotos para identificar plantas y guardarlas en tus notas.",
+          "microphonePermission": false
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "extra": {
-      "router": {
-        "asyncRoutes": {
-          "web": true
-        }
-      },
-      "eas": {
-        "projectId": "7b11d7f0-2f14-49d7-852c-798cd5155ef9"
-      }
-    },
-    "owner": "afo32"
+    }
   }
 }

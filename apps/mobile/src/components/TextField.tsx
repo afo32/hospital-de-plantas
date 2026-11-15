@@ -1,5 +1,5 @@
 import { forwardRef, useState } from 'react';
-import { StyleSheet, TextInput, View, type TextInputInstance, type TextInputProps } from 'react-native';
+import { Platform, StyleSheet, TextInput, View, type TextInputInstance, type TextInputProps } from 'react-native';
 import { colors, fonts, radius, space } from '@/theme/tokens';
 import { AppText } from './AppText';
 
@@ -52,6 +52,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 16,
     color: colors.bark,
+    ...(Platform.OS === 'web' ? { outlineWidth: 0 } : {}),
   },
   focused: { borderColor: colors.gold, borderWidth: 1.5 },
   invalid: { borderColor: colors.berry },

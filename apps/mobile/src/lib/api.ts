@@ -59,18 +59,24 @@ type FetchOptions = {
 async function rawFetch(path: string, opts: FetchOptions, token: string | null): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 10_000);
+  const isForm = opts.body instanceof FormData;
   try {
     return await fetch(`${API_URL}${path}`, {
       method: opts.method ?? 'GET',
       signal: controller.signal,
       headers: {
-        'Content-Type': 'application/json',
+        // Con FormData el propio fetch pone el Content-Type con su "boundary".
+        ...(isForm ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body),
     });
   } catch {
-    throw new ApiError('No se pudo conectar con el servidor. Revisa tu conexión.');
+    throw new ApiError(
+      controller.signal.aborted
+        ? 'El servidor tarda demasiado en responder. Inténtalo de nuevo.'
+        : 'No se pudo conectar con el servidor. Revisa tu conexión.',
+    );
   } finally {
     clearTimeout(timer);
   }

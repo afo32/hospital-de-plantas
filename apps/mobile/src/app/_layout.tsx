@@ -76,7 +76,9 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
       {/* Con sesión: el jardín. Sin sesión: login y registro. Expo Router redirige solo. */}
       <Stack.Protected guard={signedIn} redirectTo="/login">
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="add" options={{ title: 'Añadir planta', presentation: 'modal' }} />
+        <Stack.Screen name="add" options={{ title: 'Añadir planta' }} />
+        <Stack.Screen name="identify" options={{ title: 'Identificar planta' }} />
+        <Stack.Screen name="species/[id]" options={{ title: '', headerBackTitle: 'Volver' }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn} redirectTo="/">
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />

@@ -1,5 +1,5 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { Platform } from 'react-native';
+import { Platform, TurboModuleRegistry } from 'react-native';
 
 /**
  * Inicio de sesión con Google.
@@ -11,8 +11,12 @@ export const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
 
 export const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
+/** true si la app instalada incluye el módulo nativo de Google (build hecha con la librería ya instalada). */
+export const googleNativeAvailable = Platform.OS !== 'web' && TurboModuleRegistry.get('RNGoogleSignin') != null;
+
 /** true si esta versión de la app puede mostrar el botón de Google. */
-export const googleSupported = Platform.OS === 'android' && !isExpoGo && GOOGLE_WEB_CLIENT_ID.length > 0;
+export const googleSupported =
+  Platform.OS === 'android' && !isExpoGo && googleNativeAvailable && GOOGLE_WEB_CLIENT_ID.length > 0;
 
 type GoogleModule = typeof import('@react-native-google-signin/google-signin');
 let mod: GoogleModule | null = null;

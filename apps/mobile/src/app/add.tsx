@@ -2,7 +2,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { PlantFinder } from '@/components/PlantFinder';
 import { colors, space } from '@/theme/tokens';
 
-/** Pantalla modal "Añadir planta" que abre el botón +. */
+/** Pantalla "Añadir planta" que abre el botón +. */
 export default function AddPlantScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">

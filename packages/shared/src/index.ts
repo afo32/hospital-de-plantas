@@ -5,3 +5,4 @@ z.config(z.locales.es());
 
 export * from './catalog.js';
 export * from './schemas.js';
+export * from './species.js';

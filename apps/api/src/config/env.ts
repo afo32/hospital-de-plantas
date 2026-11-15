@@ -27,6 +27,10 @@ const envSchema = z.object({
   PLANTNET_API_KEY: z.string().optional(),
   KINDWISE_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  /** Modelo de Claude para las fichas y el diagnóstico */
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-5-5'),
+  /** Identificaciones por foto por usuario y día */
+  IDENTIFY_DAILY_LIMIT: z.coerce.number().int().positive().default(10),
 });
 
 export type Env = z.infer<typeof envSchema>;

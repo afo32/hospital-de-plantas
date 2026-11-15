@@ -1,4 +1,4 @@
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { colors, fonts, radius, space } from '@/theme/tokens';
 import { SearchLeafIcon } from './icons';
 
@@ -44,5 +44,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 16,
     color: colors.bark,
+    // En web quita el recuadro negro de foco del navegador (el borde dorado ya lo indica)
+    ...(Platform.OS === 'web' ? { outlineWidth: 0 } : {}),
   },
 });
