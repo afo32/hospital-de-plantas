@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module.js';
+import { GardenModule } from './garden/garden.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { SpeciesModule } from './species/species.module.js';
@@ -17,6 +18,7 @@ import { SpeciesModule } from './species/species.module.js';
     HealthModule,
     AuthModule,
     SpeciesModule,
+    GardenModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

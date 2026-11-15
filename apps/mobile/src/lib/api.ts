@@ -71,7 +71,8 @@ async function rawFetch(path: string, opts: FetchOptions, token: string | null):
       },
       body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body),
     });
-  } catch {
+  } catch (err) {
+    if (__DEV__) console.warn(`[api] ${opts.method ?? 'GET'} ${path} falló:`, err);
     throw new ApiError(
       controller.signal.aborted
         ? 'El servidor tarda demasiado en responder. Inténtalo de nuevo.'

@@ -10,10 +10,11 @@ Monorepo con tres paquetes:
 | `apps/api` | Servidor | NestJS 12, Prisma 7, PostgreSQL 16 |
 | `packages/shared` | Catálogos y esquemas compartidos | TypeScript + Zod |
 
-**Estado: fase 3 de 7.**
+**Estado: fase 4 de 7.**
 
 - Fase 1: tema élfico, navegación (Mi jardín con Hoy / Mis plantas, Buscar, Perfil), botón + y Añadir planta con categorías. API con `GET /v1/health` y esquema completo de la base de datos.
 - Fase 2: cuentas con email y contraseña, e inicio con Google (Android, build de desarrollo: ver [docs/google-login.md](docs/google-login.md)).
+- Fase 4: Mi jardín completo. Cuestionario al añadir una planta, motor de cuidado (riego, cantidad, abono, trasplante y maceta), pestaña Hoy con atrasadas/hoy/próximamente, marcar y deshacer, completar todo, posponer 1–7 días, Mis plantas, detalle con Cuidado, Info y calendario mensual.
 - Fase 3: buscar plantas por nombre (español o científico) y por familia, identificar con 1–5 fotos (Pl@ntNet) y ficha Info completa en español generada con Claude y guardada para siempre. Registro (crea tu primer jardín), inicio y cierre de sesión, sesión guardada en el llavero del móvil y renovada sola, todas las rutas del API protegidas salvo las de acceso, límite de intentos y mensajes en español.
 
 ---
@@ -127,6 +128,8 @@ hospital-de-plantas/
 │     ├─ auth/                 registro, login, Google, refresh, logout, guard global, contraseñas (scrypt)
 │     ├─ species/              búsqueda (catálogo + GBIF + Wikipedia), identificación (Pl@ntNet), ficha con Claude
 │     │  └─ catalog.data.ts    plantas populares por familia (añade las tuyas aquí)
+│     ├─ garden/               plantas, tareas de Hoy, completar, posponer, calendario
+│     │  └─ care-engine.ts     motor de cuidado (fórmulas de riego, abono, trasplante y maceta)
 │     ├─ usage/                límites diarios por usuario
 │     └─ users/                GET y PATCH /v1/me
 └─ apps/mobile/src/
@@ -136,6 +139,8 @@ hospital-de-plantas/
    │  ├─ (tabs)/profile.tsx    Perfil (estado de conexión)
    │  ├─ add.tsx               Añadir planta
    │  ├─ identify.tsx          Identificar con fotos
+   │  ├─ plant-setup/[speciesId].tsx  Cuestionario al añadir una planta
+   │  ├─ plant/[id].tsx        Detalle de tu planta (Cuidado · Salud · Notas · Info)
    │  └─ species/[id].tsx      Ficha Info de una especie
    │  ├─ (auth)/login.tsx      Entrar
    │  ├─ (auth)/register.tsx   Crear cuenta
@@ -165,7 +170,7 @@ Pergamino, musgo, corteza y oro viejo. Titulares en *Cormorant Garamond*, texto 
 
 2. ~~Autenticación con email y Google~~ ✅ · Apple desactivado hasta tener cuenta de Apple Developer
 3. ~~Especies, búsqueda, identificación por fotos y ficha Info con IA~~ ✅
-4. Mi jardín: cuestionario, motor de cuidado, tareas, posponer, calendario
+4. ~~Mi jardín: cuestionario, motor de cuidado, tareas, posponer, calendario~~ ✅
 5. Clima, luxómetro y notificaciones
 6. Salud (diagnóstico con IA) y notas con fotos
 7. Jardín compartido, pruebas y publicación

@@ -1,21 +1,9 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Param,
-  Post,
-  Query,
-  UploadedFiles,
-  UseInterceptors,
-} from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  identifyRequestSchema,
+  type IdentifyRequest,
   type IdentifyResponse,
-  PHOTO_ORGANS,
-  type PhotoOrgan,
   resolveSpeciesSchema,
   type ResolveSpeciesInput,
   type SpeciesDetail,
@@ -27,12 +15,6 @@ import {
 import { z } from 'zod';
 import { CurrentUserId } from '../auth/current-user.decorator.js';
 import { SpeciesService } from './species.service.js';
-
-const MAX_PHOTOS = 5;
-const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
-const ORGAN_VALUES = new Set<string>(PHOTO_ORGANS.map((o) => o.value));
-
-type UploadedPhoto = { buffer: Buffer; mimetype: string; size: number };
 
 @ApiTags('especies')
 @ApiBearerAuth()
@@ -46,30 +28,18 @@ export class SpeciesController {
     return { results: await this.species.search(query) };
   }
 
-  /**
-   * Identificar con 1–5 fotos (multipart/form-data).
-   * Campos: `images` (archivos) y `organs` (uno por foto: auto, leaf, flower, fruit, bark; separados por comas).
-   */
+  /** Identificar con 1–5 fotos (JPEG en base64 dentro de un JSON, una por órgano: auto, leaf, flower, fruit, bark). */
   @Post('identify')
   @HttpCode(200)
-  @UseInterceptors(
-    FilesInterceptor('images', MAX_PHOTOS, {
-      limits: { fileSize: MAX_PHOTO_BYTES },
-      fileFilter: (_req, file, cb) => cb(null, /^image\/(jpe?g|png|webp|heic|heif)$/i.test(file.mimetype)),
-    }),
-  )
   identify(
     @CurrentUserId() userId: string,
-    @UploadedFiles() files: UploadedPhoto[] | undefined,
-    @Body() body: { organs?: string | string[] },
+    @Body({ schema: identifyRequestSchema }) body: IdentifyRequest,
   ): Promise<IdentifyResponse> {
-    if (!files?.length) throw new BadRequestException('Añade al menos una foto de la planta.');
-    const raw = Array.isArray(body.organs) ? body.organs : (body.organs ?? '').split(',');
-    const organs = raw.map((o) => o.trim()).filter(Boolean);
-    const photos = files.map((f, i) => {
-      const organ = organs[i] && ORGAN_VALUES.has(organs[i]) ? (organs[i] as PhotoOrgan) : 'auto';
-      return { buffer: f.buffer, mimetype: f.mimetype, organ };
-    });
+    const photos = body.photos.map((p) => ({
+      buffer: Buffer.from(p.base64.replace(/^data:image\/\w+;base64,/, ''), 'base64'),
+      mimetype: 'image/jpeg',
+      organ: p.organ,
+    }));
     return this.species.identify(userId, photos);
   }
 

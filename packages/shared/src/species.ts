@@ -37,6 +37,20 @@ export const PHOTO_ORGANS = [
 ] as const;
 export type PhotoOrgan = (typeof PHOTO_ORGANS)[number]['value'];
 
+/** Fotos para identificar: JPEG en base64 (sin el prefijo data:), una por órgano. */
+export const identifyRequestSchema = z.object({
+  photos: z
+    .array(
+      z.object({
+        base64: z.string().min(100, 'Foto vacía').max(14_000_000, 'Foto demasiado grande'),
+        organ: z.enum(['auto', 'leaf', 'flower', 'fruit', 'bark']),
+      }),
+    )
+    .min(1, 'Añade al menos una foto de la planta.')
+    .max(5, 'Como máximo 5 fotos.'),
+});
+export type IdentifyRequest = z.infer<typeof identifyRequestSchema>;
+
 export const identifyCandidateSchema = speciesSummarySchema.extend({
   /** Probabilidad 0–1 */
   score: z.number(),

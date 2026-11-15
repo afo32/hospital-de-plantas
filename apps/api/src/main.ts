@@ -1,11 +1,14 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import { createValidationPipe } from './common/validation.js';
 import { env } from './config/env.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Hasta 5 fotos en base64 por petición (identificación y, más adelante, salud)
+  app.useBodyParser('json', { limit: '25mb' });
 
   app.setGlobalPrefix('v1');
   app.enableCors();
