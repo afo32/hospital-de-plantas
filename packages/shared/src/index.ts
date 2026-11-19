@@ -9,3 +9,4 @@ export * from './species.js';
 export * from './garden.js';
 export * from './weather.js';
 export * from './health.js';
+export * from './sharing.js';

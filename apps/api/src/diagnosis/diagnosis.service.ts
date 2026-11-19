@@ -20,6 +20,7 @@ import { env } from '../config/env.js';
 import { GardenService } from '../garden/garden.service.js';
 import type { Diagnosis as DiagnosisRow } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PushService } from '../push/push.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { UsageService } from '../usage/usage.service.js';
 import { DiagnosisAi, type PlantFacts } from './diagnosis.ai.js';
@@ -36,6 +37,7 @@ export class DiagnosisService {
     private readonly storage: StorageService,
     private readonly usage: UsageService,
     private readonly ai: DiagnosisAi,
+    private readonly push: PushService,
   ) {}
 
   private toDto(d: DiagnosisRow, remainingToday: number | null = null): Diagnosis {
@@ -135,6 +137,7 @@ export class DiagnosisService {
         symptoms: input.symptoms?.trim() || null,
         triage,
         status: 'questions',
+        createdById: userId,
       },
     });
     return this.toDto(row, remaining);
@@ -167,6 +170,14 @@ export class DiagnosisService {
     const row = await this.prisma.diagnosis.update({
       where: { id },
       data: { answers: clean, result, status: 'done', followUpAt: followUp },
+    });
+    this.push.record({
+      gardenId: facts.plant.gardenId,
+      actorId: userId,
+      kind: 'diagnosis',
+      plantId: d.plantId,
+      plantName: facts.name,
+      extra: result.title,
     });
     return this.toDto(row);
   }

@@ -39,6 +39,14 @@ const envSchema = z.object({
   R2_BUCKET: z.string().optional(),
   /** Solo para pruebas con otro servicio compatible con S3; normalmente vacío */
   R2_ENDPOINT: z.string().optional(),
+  /** Token de acceso de Expo para enviar push (opcional; solo si activas "push security" en expo.dev) */
+  EXPO_ACCESS_TOKEN: z.string().optional(),
+  /** Segundos que se esperan para juntar varias acciones en un solo aviso ("Ana regó 3 plantas") */
+  PUSH_BATCH_SECONDS: z.coerce.number().int().min(0).default(60),
+  /** URL pública del API sin /v1 (p. ej. https://xxx.up.railway.app). Con ella, las invitaciones llevan un enlace https que se puede pulsar en WhatsApp. */
+  PUBLIC_URL: z.string().optional(),
+  /** Email de contacto para la política de privacidad y el borrado de cuentas */
+  SUPPORT_EMAIL: z.string().optional(),
   /** Carpeta para las fotos cuando no hay R2 configurado */
   UPLOADS_DIR: z.string().default('uploads'),
 });

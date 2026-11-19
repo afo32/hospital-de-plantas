@@ -20,6 +20,7 @@ import {
 import { addDays, dayToDate, diffDays, localDay, monthOf } from '../common/days.js';
 import type { CareEvent, Species, User, UserPlant } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PushService } from '../push/push.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { WeatherService } from '../weather/weather.service.js';
 import { computeCarePlan } from './care-engine.js';
@@ -28,7 +29,7 @@ import { computeCarePlan } from './care-engine.js';
 const UPCOMING_DAYS = 7;
 const careSchema = speciesProfileSchema.shape.care;
 
-export type PlantWithRelations = UserPlant & { species: Species; events: (CareEvent & { doneBy: { name: string | null } })[] };
+export type PlantWithRelations = UserPlant & { species: Species; events: (CareEvent & { doneBy: { name: string | null } | null })[] };
 export type Ctx = { user: User; today: string; tz: string; southern: boolean; weather: Weather | null };
 
 @Injectable()
@@ -37,6 +38,7 @@ export class GardenService {
     private readonly prisma: PrismaService,
     private readonly weatherService: WeatherService,
     private readonly storage: StorageService,
+    private readonly push: PushService,
   ) {}
 
   /* ---------- Permisos y contexto ---------- */
@@ -183,6 +185,7 @@ export class GardenService {
       data: {
         gardenId,
         speciesId: species.id,
+        addedById: userId,
         nickname: input.nickname || null,
         location: input.location,
         room: input.room || null,
@@ -209,6 +212,13 @@ export class GardenService {
           ],
         },
       },
+    });
+    this.push.record({
+      gardenId,
+      actorId: userId,
+      kind: 'plant_added',
+      plantId: created.id,
+      plantName: input.nickname || species.commonNames[0] || species.scientificName,
     });
     return this.getPlant(userId, created.id);
   }
@@ -311,6 +321,7 @@ export class GardenService {
     const ctx = await this.context(userId);
     // Acciones guardadas sin conexión: se aceptan hasta 3 días atrás.
     const taskDay = day && day <= ctx.today && diffDays(day, ctx.today) <= 3 ? day : ctx.today;
+    let isNew = true;
     try {
       await this.prisma.careEvent.create({
         data: {
@@ -324,6 +335,16 @@ export class GardenService {
       });
     } catch (err) {
       if ((err as { code?: string }).code !== 'P2002') throw err; // ya estaba hecha hoy
+      isNew = false;
+    }
+    if (isNew) {
+      this.push.record({
+        gardenId: plant.gardenId,
+        actorId: userId,
+        kind: type,
+        plantId,
+        plantName: plant.nickname ?? plant.species.commonNames[0] ?? plant.species.scientificName,
+      });
     }
     const when = taskDay === ctx.today ? new Date() : dayToDate(taskDay);
     await this.prisma.userPlant.update({
@@ -394,7 +415,7 @@ export class GardenService {
             daysLate: 0,
             amountMl: type === 'water' ? plan.water.amountMl : null,
             done: true,
-            doneBy: doneToday.doneBy.name,
+            doneBy: doneToday.doneBy?.name ?? null,
             doneAt: doneToday.doneAt.toISOString(),
           });
           continue;
@@ -509,6 +530,37 @@ export class GardenService {
           title: messages.length > 1 ? `Aviso de clima para ${messages.length} plantas` : 'Aviso de clima',
           body: messages.join('\n'),
         })),
+    };
+  }
+
+  /** Recordatorios de todos tus jardines juntos (el móvil programa los avisos de todos). */
+  async remindersAll(userId: string, days = 14): Promise<Reminders> {
+    const memberships = await this.prisma.gardenMember.findMany({ where: { userId }, select: { gardenId: true } });
+    const parts = await Promise.all(memberships.map((m) => this.reminders(userId, m.gardenId, days)));
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const byDay = new Map<string, Reminders['days'][number]>();
+    const alerts = new Map<string, Reminders['alerts'][number]>();
+    for (const r of parts) {
+      for (const d of r.days) {
+        const e = byDay.get(d.day) ?? { day: d.day, water: [], fertilize: [], repot: [], checkup: [] };
+        e.water.push(...d.water);
+        e.fertilize.push(...d.fertilize);
+        e.repot.push(...d.repot);
+        e.checkup.push(...d.checkup);
+        byDay.set(d.day, e);
+      }
+      for (const a of r.alerts) {
+        const prev = alerts.get(a.day);
+        alerts.set(a.day, prev ? { day: a.day, title: 'Aviso de clima para varias plantas', body: `${prev.body}\n${a.body}` } : a);
+      }
+    }
+    return {
+      reminderHour: user.reminderHour,
+      notifyWater: user.notifyWater,
+      notifyCare: user.notifyCare,
+      notifyWeather: user.notifyWeather,
+      days: [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day)),
+      alerts: [...alerts.values()].sort((a, b) => a.day.localeCompare(b.day)),
     };
   }
 

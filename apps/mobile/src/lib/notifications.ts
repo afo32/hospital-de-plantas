@@ -1,7 +1,8 @@
 import type { Reminders } from '@hdp/shared';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { getReminders } from './garden';
+import { remindersSchema } from '@hdp/shared';
+import { api } from './api';
 
 /**
  * Avisos LOCALES: el móvil los programa con antelación a partir de las tareas de los próximos 14 días
@@ -11,6 +12,8 @@ import { getReminders } from './garden';
 
 const CHANNEL_TASKS = 'tareas';
 const CHANNEL_WEATHER = 'clima';
+/** Canal de los avisos push del jardín compartido (el servidor lo indica en cada aviso). */
+const CHANNEL_GARDEN = 'jardin';
 const ALERT_HOUR = 18;
 
 let configured = false;
@@ -36,6 +39,12 @@ function configure() {
       name: 'Alertas de clima',
       importance: Notifications.AndroidImportance.HIGH,
       lightColor: '#9C3D2E',
+    });
+    void Notifications.setNotificationChannelAsync(CHANNEL_GARDEN, {
+      name: 'Tu jardín compartido',
+      description: 'Cuando alguien riega, añade una planta o revisa su salud',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      lightColor: '#B8893B',
     });
   }
 }
@@ -90,11 +99,14 @@ export function buildNotifications(r: Reminders, now = new Date()) {
   return out;
 }
 
-/** Borra los avisos programados y vuelve a programarlos con los datos actuales. */
-export async function syncReminders(gardenId: string): Promise<number> {
+/**
+ * Borra los avisos programados y vuelve a programarlos con los datos actuales de TODOS tus jardines.
+ * Se llama al abrir el jardín, al marcar tareas y cuando llega un aviso de que alguien regó.
+ */
+export async function syncReminders(): Promise<number> {
   if (Platform.OS === 'web') return 0;
   if (!(await ensureNotificationPermission(false))) return 0;
-  const reminders = await getReminders(gardenId);
+  const reminders = remindersSchema.parse(await api('/me/reminders'));
   await Notifications.cancelAllScheduledNotificationsAsync();
   const items = buildNotifications(reminders);
   for (const n of items) {

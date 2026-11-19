@@ -7,6 +7,8 @@ import { GardenModule } from './garden/garden.module.js';
 import { NotesModule } from './notes/notes.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { PushModule } from './push/push.module.js';
+import { SharingModule } from './sharing/sharing.module.js';
 import { SpeciesModule } from './species/species.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { WeatherModule } from './weather/weather.module.js';
@@ -21,12 +23,14 @@ import { WeatherModule } from './weather/weather.module.js';
     PrismaModule,
     WeatherModule,
     StorageModule,
+    PushModule,
     HealthModule,
     AuthModule,
     SpeciesModule,
     GardenModule,
     NotesModule,
     DiagnosisModule,
+    SharingModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

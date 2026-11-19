@@ -1,6 +1,7 @@
 import type { HealthResponse, Place, UpdateMeInput } from '@hdp/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { router } from 'expo-router';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { useAuth } from '@/auth/AuthProvider';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
@@ -10,6 +11,9 @@ import { SearchField } from '@/components/SearchField';
 import { API_URL, getHealth } from '@/lib/api';
 import { detectLocation, placeLabel, searchPlaces } from '@/lib/location';
 import { ensureNotificationPermission, syncReminders } from '@/lib/notifications';
+import { registerPushToken } from '@/lib/push';
+import { deleteMyAccount } from '@/lib/sharing';
+import { gardenLabel, ROLE_LABELS } from '@hdp/shared';
 import { colors, radius, space } from '@/theme/tokens';
 
 const HOURS = [7, 8, 9, 10, 12, 14, 18, 20, 21];
@@ -19,6 +23,7 @@ export default function ProfileScreen() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState('');
   const [signingOut, setSigningOut] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [cityQuery, setCityQuery] = useState('');
   const [places, setPlaces] = useState<Place[]>([]);
@@ -63,8 +68,8 @@ export default function ProfileScreen() {
   /** Guarda en el servidor y reprograma los avisos con los nuevos ajustes. */
   const save = async (input: UpdateMeInput) => {
     try {
-      const u = await updateMe(input);
-      if (u.defaultGardenId) void syncReminders(u.defaultGardenId).catch(() => undefined);
+      await updateMe(input);
+      void syncReminders().catch(() => undefined);
     } catch (err) {
       Alert.alert('No se pudo guardar', err instanceof Error ? err.message : 'Inténtalo de nuevo.');
     }
@@ -91,7 +96,10 @@ export default function ProfileScreen() {
   const enableNotifications = async () => {
     const ok = await ensureNotificationPermission(true);
     setNotifGranted(ok);
-    if (ok && user?.defaultGardenId) await syncReminders(user.defaultGardenId).catch(() => undefined);
+    if (ok) {
+      await syncReminders().catch(() => undefined);
+      void registerPushToken();
+    }
     if (!ok)
       Alert.alert(
         'Avisos desactivados',
@@ -111,6 +119,37 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const confirmDelete = () => {
+    const go = async () => {
+      setDeleting(true);
+      try {
+        await deleteMyAccount();
+        await signOut();
+      } catch (err) {
+        setDeleting(false);
+        Alert.alert('No se pudo borrar la cuenta', err instanceof Error ? err.message : 'Inténtalo de nuevo.');
+      }
+    };
+    const message =
+      'Se borrarán tu cuenta, tus jardines (los que no compartes), plantas, notas y fotos. Los jardines compartidos de los que eres dueño pasarán a otra persona. No se puede deshacer.';
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm?.(`${message}\n\n¿Borrar tu cuenta?`)) void go();
+      return;
+    }
+    Alert.alert('¿Borrar tu cuenta?', message, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Borrar',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Última confirmación', 'Todo se borrará ahora mismo.', [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Sí, borrar todo', style: 'destructive', onPress: () => void go() },
+          ]),
+      },
+    ]);
+  };
+
   if (!user) return null;
 
   return (
@@ -120,6 +159,25 @@ export default function ProfileScreen() {
           {user.name ?? 'Jardinero'}
         </AppText>
         <AppText color={colors.barkSoft}>{user.email}</AppText>
+      </Card>
+
+      {/* Jardines */}
+      <Card>
+        <AppText variant="heading" color={colors.mossDeep}>
+          Tus jardines
+        </AppText>
+        {user.gardens.map((g) => (
+          <AppText key={g.id}>
+            {g.id === user.defaultGardenId ? '🌿 ' : '· '}
+            {gardenLabel(g)}
+            <AppText variant="small" color={colors.barkSoft}>
+              {' '}
+              ({ROLE_LABELS[g.role].toLowerCase()})
+            </AppText>
+          </AppText>
+        ))}
+        <Button label="Gestionar y compartir" variant="outline" onPress={() => router.push('/gardens')} />
+        <Button label="Unirme con un código" variant="ghost" onPress={() => router.push('/unirse')} />
       </Card>
 
       {/* Ubicación */}
@@ -190,6 +248,11 @@ export default function ProfileScreen() {
           value={user.notifyWeather}
           onChange={(v) => save({ notifyWeather: v })}
         />
+        <ToggleRow
+          label="Lo que hacen otras personas en tus jardines compartidos"
+          value={user.notifyGarden}
+          onChange={(v) => save({ notifyGarden: v })}
+        />
       </Card>
 
       {/* Servidor */}
@@ -220,6 +283,19 @@ export default function ProfileScreen() {
       </Card>
 
       <Button label="Cerrar sesión" variant="danger" onPress={confirmSignOut} loading={signingOut} />
+
+      <View style={styles.legal}>
+        <Pressable onPress={() => void Linking.openURL(`${API_URL}/privacidad`)} accessibilityRole="link">
+          <AppText variant="small" color={colors.moss}>
+            Política de privacidad
+          </AppText>
+        </Pressable>
+        <Pressable onPress={confirmDelete} accessibilityRole="button" disabled={deleting}>
+          <AppText variant="small" color={colors.berry}>
+            {deleting ? 'Borrando…' : 'Borrar mi cuenta'}
+          </AppText>
+        </Pressable>
+      </View>
     </Screen>
   );
 }
@@ -241,6 +317,7 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  legal: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: space.md },
   dot: { width: 12, height: 12, borderRadius: 6 },
   flex: { flex: 1 },
   place: {

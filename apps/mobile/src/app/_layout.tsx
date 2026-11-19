@@ -15,6 +15,9 @@ import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import { flushQueue } from '@/lib/offline';
+import { emitGardenChanged } from '@/lib/events';
+import { syncReminders } from '@/lib/notifications';
+import { registerPushToken } from '@/lib/push';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { OfflineScreen } from '@/components/OfflineScreen';
 import { colors, fonts } from '@/theme/tokens';
@@ -75,15 +78,33 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
     const subApp = AppState.addEventListener('change', (st) => {
       if (st === 'active') void flushQueue();
     });
-    // Al tocar un aviso, abre Mi jardín.
+    // Este móvil recibe los avisos push del jardín compartido (si hay permiso).
+    void registerPushToken();
+    // Al tocar un aviso: abre la planta si el aviso es de una sola, o Mi jardín.
     const subNotif =
       Platform.OS === 'web'
         ? null
-        : Notifications.addNotificationResponseReceivedListener(() => router.navigate('/'));
+        : Notifications.addNotificationResponseReceivedListener((res) => {
+            const data = res.notification.request.content.data as { plantId?: string | null } | undefined;
+            if (data?.plantId) router.push({ pathname: '/plant/[id]', params: { id: data.plantId } });
+            else router.navigate('/');
+          });
+    // Si alguien del jardín riega, recargamos y reprogramamos los avisos (para no avisarte de algo ya hecho).
+    const subReceived =
+      Platform.OS === 'web'
+        ? null
+        : Notifications.addNotificationReceivedListener((n) => {
+            const data = n.request.content.data as { type?: string } | undefined;
+            if (data?.type === 'garden') {
+              emitGardenChanged();
+              void syncReminders().catch(() => undefined);
+            }
+          });
     return () => {
       unsubNet();
       subApp.remove();
       subNotif?.remove();
+      subReceived?.remove();
     };
   }, [status]);
 
@@ -111,6 +132,10 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
         <Stack.Screen name="light-meter" options={{ title: 'Medidor de luz' }} />
         <Stack.Screen name="diagnose/[plantId]" options={{ title: 'Revisar su salud' }} />
         <Stack.Screen name="diagnosis/[id]" options={{ title: 'Salud', headerBackTitle: 'Volver' }} />
+        <Stack.Screen name="gardens/index" options={{ title: 'Tus jardines' }} />
+        <Stack.Screen name="gardens/[id]" options={{ title: 'Jardín', headerBackTitle: 'Volver' }} />
+        <Stack.Screen name="unirse/index" options={{ title: 'Unirme a un jardín' }} />
+        <Stack.Screen name="unirse/[code]" options={{ title: 'Invitación' }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn} redirectTo="/">
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />

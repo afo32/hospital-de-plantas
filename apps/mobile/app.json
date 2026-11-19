@@ -20,7 +20,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.hospitaldeplantas.app",
-      "permissions": []
+      "permissions": [],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "single",

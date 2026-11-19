@@ -107,7 +107,22 @@ export const publicUserSchema = z.object({
   notifyWater: z.boolean(),
   notifyCare: z.boolean(),
   notifyWeather: z.boolean(),
+  /** Avisos push de lo que hacen otras personas en tus jardines compartidos */
+  notifyGarden: z.boolean().default(true),
+  /** Jardín activo (el que se ve en "Mi jardín") */
   defaultGardenId: z.uuid().nullable(),
+  /** Jardines a los que perteneces */
+  gardens: z
+    .array(
+      z.object({
+        id: z.uuid(),
+        name: z.string(),
+        role: z.enum(['owner', 'editor', 'viewer']),
+        /** Nombre del dueño, para distinguir "Mi jardín" de Juan del tuyo */
+        ownerName: z.string().nullable().default(null),
+      }),
+    )
+    .default([]),
 });
 export type PublicUser = z.infer<typeof publicUserSchema>;
 
@@ -128,6 +143,9 @@ export const updateMeSchema = z
     notifyWater: z.boolean().optional(),
     notifyCare: z.boolean().optional(),
     notifyWeather: z.boolean().optional(),
+    notifyGarden: z.boolean().optional(),
+    /** Cambiar el jardín que se ve en "Mi jardín" */
+    activeGardenId: z.uuid().optional(),
     /** Ubicación: se guarda redondeada a ~1 km (no hace falta más para el clima) */
     lat: z.number().min(-90).max(90).nullable().optional(),
     lon: z.number().min(-180).max(180).nullable().optional(),

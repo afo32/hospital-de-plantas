@@ -1,8 +1,9 @@
-import type { PlantSummary, Reminders, Task, TodayResponse, Weather } from '@hdp/shared';
+import { gardenLabel, type PlantSummary, type Reminders, type Task, type TodayResponse, type Weather } from '@hdp/shared';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useAuth } from '@/auth/AuthProvider';
+import { ActionSheet } from '@/components/ActionSheet';
 import { AppText } from '@/components/AppText';
 import { Banner } from '@/components/Banner';
 import { Button } from '@/components/Button';
@@ -14,7 +15,9 @@ import { SnoozeSheet } from '@/components/SnoozeSheet';
 import { TaskRow } from '@/components/TaskRow';
 import { VineDivider } from '@/components/VineDivider';
 import { WeatherStrip } from '@/components/WeatherStrip';
+import { onGardenChanged } from '@/lib/events';
 import { completeAll, completeTask, getPlants, getReminders, getToday, snoozeWatering, undoTask } from '@/lib/garden';
+import { registerPushToken } from '@/lib/push';
 import { ensureNotificationPermission, syncReminders } from '@/lib/notifications';
 import { flushQueue, pendingCount, QueuedOffline } from '@/lib/offline';
 import { getWeather } from '@/lib/weather';
@@ -30,9 +33,13 @@ type GardenTab = (typeof GARDEN_TABS)[number]['value'];
 const taskKey = (t: Task) => `${t.plantId}:${t.type}`;
 
 export default function GardenScreen() {
-  const { user } = useAuth();
+  const { user, updateMe } = useAuth();
   const gardenId = user?.defaultGardenId ?? null;
   const firstName = user?.name?.split(' ')[0];
+  const gardens = user?.gardens ?? [];
+  const activeGarden = gardens.find((g) => g.id === gardenId) ?? null;
+  const readOnly = activeGarden?.role === 'viewer';
+  const [switching, setSwitching] = useState(false);
 
   const [tab, setTab] = useState<GardenTab>('today');
   const [today, setToday] = useState<TodayResponse | null>(null);
@@ -66,7 +73,7 @@ export default function GardenScreen() {
         getReminders(gardenId)
           .then((r) => setAlerts(r.alerts.filter((a) => a.day === t.data.today)))
           .catch(() => undefined);
-        void syncReminders(gardenId).catch(() => undefined);
+        void syncReminders().catch(() => undefined);
         if (Platform.OS !== 'web') ensureNotificationPermission(false).then((ok) => setNotifAsk(!ok));
       }
     } catch (err) {
@@ -80,6 +87,21 @@ export default function GardenScreen() {
       void load();
     }, [load]),
   );
+
+  // Y cuando llega un aviso de que alguien del jardín ha hecho algo.
+  useEffect(() => onGardenChanged(() => void load()), [load]);
+
+  const switchGarden = async (id: string) => {
+    if (id === gardenId) return;
+    setToday(null);
+    setPlants(null);
+    setAlerts([]);
+    try {
+      await updateMe({ activeGardenId: id });
+    } catch (err) {
+      Alert.alert('No se pudo cambiar de jardín', err instanceof Error ? err.message : 'Inténtalo de nuevo.');
+    }
+  };
 
   const refresh = async () => {
     setRefreshing(true);
@@ -121,7 +143,9 @@ export default function GardenScreen() {
   };
 
   const toggle = (t: Task) =>
-    withBusy(
+    readOnly
+      ? Alert.alert('Solo puedes mirar', 'En este jardín no puedes marcar tareas. Pide al dueño que te dé permiso para cuidar.')
+      : withBusy(
       taskKey(t),
       () => (t.done ? undoTask(t.plantId, t.type) : completeTask(t.plantId, t.type)),
       () => applyOffline(t, 'toggle'),
@@ -141,7 +165,10 @@ export default function GardenScreen() {
   const askNotifications = async () => {
     const ok = await ensureNotificationPermission(true);
     setNotifAsk(!ok);
-    if (ok && gardenId) await syncReminders(gardenId).catch(() => undefined);
+    if (ok) {
+      await syncReminders().catch(() => undefined);
+      void registerPushToken();
+    }
   };
 
   const doCompleteAll = async () => {
@@ -176,7 +203,7 @@ export default function GardenScreen() {
             today={today!.today}
             busy={busy.has(taskKey(t))}
             onToggle={() => toggle(t)}
-            onSnooze={t.type === 'water' ? () => setSnoozeFor(t) : undefined}
+            onSnooze={t.type === 'water' && !readOnly ? () => setSnoozeFor(t) : undefined}
             onOpen={() => router.push({ pathname: '/plant/[id]', params: { id: t.plantId } })}
           />
         ))}
@@ -189,11 +216,33 @@ export default function GardenScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <AppText variant="title" color={colors.mossDeep}>
-          Mi jardín
+          {activeGarden ? gardenLabel(activeGarden) : 'Mi jardín'}
         </AppText>
         <AppText variant="quote" color={colors.barkSoft}>
           {firstName ? `Hola, ${firstName}. Cada hoja a su tiempo` : 'Cada hoja a su tiempo'}
         </AppText>
+        <View style={styles.gardenRow}>
+          {gardens.length > 1 ? (
+            <Pressable onPress={() => setSwitching(true)} hitSlop={8} accessibilityRole="button">
+              <AppText variant="label" color={colors.moss}>
+                🌿 Cambiar de jardín ▾
+              </AppText>
+            </Pressable>
+          ) : (
+            <View />
+          )}
+          {gardenId ? (
+            <Pressable
+              onPress={() => router.push({ pathname: '/gardens/[id]', params: { id: gardenId } })}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <AppText variant="label" color={colors.moss}>
+                👥 {activeGarden?.role === 'owner' ? 'Compartir' : 'Personas y actividad'}
+              </AppText>
+            </Pressable>
+          ) : null}
+        </View>
         <VineDivider />
       </View>
       <SegmentedTabs options={GARDEN_TABS} value={tab} onChange={setTab} />
@@ -209,6 +258,14 @@ export default function GardenScreen() {
               {pending
                 ? ` ${pending} ${pending === 1 ? 'cambio se enviará' : 'cambios se enviarán'} al volver la red.`
                 : ''}
+            </AppText>
+          </Banner>
+        ) : null}
+
+        {readOnly ? (
+          <Banner title="Solo puedes mirar este jardín">
+            <AppText variant="small">
+              Ves sus plantas y cuidados, pero no puedes marcar tareas ni añadir plantas.
             </AppText>
           </Banner>
         ) : null}
@@ -260,7 +317,7 @@ export default function GardenScreen() {
               {renderGroup('Atrasadas', late, colors.berry)}
               {renderGroup('Hoy', now)}
               {renderGroup('Próximamente', upcoming)}
-              {pendingNow > 1 ? (
+              {pendingNow > 1 && !readOnly ? (
                 <Button label={`Completar todo (${pendingNow})`} onPress={doCompleteAll} loading={completingAll} />
               ) : null}
             </>
@@ -282,7 +339,19 @@ export default function GardenScreen() {
         ) : null}
       </ScrollView>
 
-      <Fab onPress={() => router.push('/add')} />
+      {readOnly ? null : <Fab onPress={() => router.push('/add')} />}
+      <ActionSheet
+        visible={switching}
+        title="Tus jardines"
+        onClose={() => setSwitching(false)}
+        actions={[
+          ...gardens.map((g) => ({
+            label: `${g.id === gardenId ? '✓ ' : ''}${gardenLabel(g)}${g.role === 'viewer' ? ' · solo mirar' : ''}`,
+            onPress: () => void switchGarden(g.id),
+          })),
+          { label: '⚙ Gestionar jardines', onPress: () => router.push('/gardens') },
+        ]}
+      />
       <SnoozeSheet plantName={snoozeFor?.plantName ?? null} onPick={snooze} onClose={() => setSnoozeFor(null)} />
     </SafeAreaView>
   );
@@ -291,6 +360,7 @@ export default function GardenScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.parchment },
   header: { paddingHorizontal: space.lg, paddingTop: space.md, gap: space.xs },
+  gardenRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs },
   content: { padding: space.lg, paddingBottom: 120, gap: space.lg },
   loader: { marginTop: space.xl },
   group: { gap: space.sm },

@@ -3,9 +3,10 @@ import type { CreateNoteInput, Note, UpdateNoteInput } from '@hdp/shared';
 import { GardenService } from '../garden/garden.service.js';
 import type { Note as NoteRow } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PushService } from '../push/push.service.js';
 import { StorageService } from '../storage/storage.service.js';
 
-type NoteWithAuthor = NoteRow & { author: { name: string | null } };
+type NoteWithAuthor = NoteRow & { author: { name: string | null } | null };
 
 @Injectable()
 export class NotesService {
@@ -13,6 +14,7 @@ export class NotesService {
     private readonly prisma: PrismaService,
     private readonly garden: GardenService,
     private readonly storage: StorageService,
+    private readonly push: PushService,
   ) {}
 
   private toDto(n: NoteWithAuthor, userId: string): Note {
@@ -21,7 +23,7 @@ export class NotesService {
       plantId: n.plantId,
       text: n.text,
       photos: n.photoKeys.map((k) => this.storage.url(k)),
-      authorName: n.author.name,
+      authorName: n.author?.name ?? null,
       mine: n.authorId === userId,
       createdAt: n.createdAt.toISOString(),
     };
@@ -39,12 +41,19 @@ export class NotesService {
   }
 
   async create(userId: string, plantId: string, input: CreateNoteInput): Promise<Note> {
-    await this.garden.accessPlant(userId, plantId, true);
+    const plant = await this.garden.accessPlant(userId, plantId, true);
     const keys = await this.storage.putImages('note', plantId, input.photos ?? []);
     try {
       const row = await this.prisma.note.create({
         data: { plantId, authorId: userId, text: input.text?.trim() || null, photoKeys: keys },
         include: { author: { select: { name: true } } },
+      });
+      this.push.record({
+        gardenId: plant.gardenId,
+        actorId: userId,
+        kind: 'note',
+        plantId,
+        plantName: plant.nickname ?? plant.species.commonNames[0] ?? plant.species.scientificName,
       });
       return this.toDto(row, userId);
     } catch (err) {

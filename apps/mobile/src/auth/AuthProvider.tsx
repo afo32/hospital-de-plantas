@@ -17,6 +17,7 @@ import {
   saveSession,
   setSessionExpiredHandler,
 } from '@/lib/api';
+import { unregisterPushToken } from '@/lib/push';
 import { getGoogleIdToken, googleSignOut } from './google';
 import { cancelAllReminders } from '@/lib/notifications';
 import { clearCache } from '@/lib/offline';
@@ -130,6 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Primero, que este móvil deje de recibir los avisos push de esta cuenta.
+    await unregisterPushToken();
     const refreshToken = await getStoredRefreshToken();
     if (refreshToken) {
       // Si falla (sin red), cerramos igualmente en el móvil.

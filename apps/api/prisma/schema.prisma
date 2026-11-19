@@ -27,6 +27,10 @@ model User {
   notifyWater  Boolean  @default(true)
   notifyCare   Boolean  @default(true)
   notifyWeather Boolean @default(true)
+  /// Avisos push de lo que hacen otras personas en tus jardines compartidos
+  notifyGarden Boolean  @default(true)
+  /// Jardín que se ve en "Mi jardín" (null = el primero)
+  activeGardenId String? @db.Uuid
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -37,6 +41,7 @@ model User {
   careEvents    CareEvent[]
   notes         Note[]
   usage         ApiUsage[]
+  plantsAdded   UserPlant[] @relation("PlantAddedBy")
 }
 
 /// Cuenta social vinculada (Google o Apple)
@@ -102,6 +107,8 @@ model GardenInvite {
   expiresAt  DateTime
   acceptedBy String?   @db.Uuid
   acceptedAt DateTime?
+  /// Quién creó la invitación
+  createdById String?  @db.Uuid
   createdAt  DateTime  @default(now())
   garden     Garden    @relation(fields: [gardenId], references: [id], onDelete: Cascade)
 }
@@ -163,10 +170,13 @@ model UserPlant {
   repotEveryMonths   Int?
   snoozedUntil       DateTime?
   archivedAt         DateTime?
+  /// Quién la añadió al jardín
+  addedById          String?   @db.Uuid
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   garden    Garden      @relation(fields: [gardenId], references: [id], onDelete: Cascade)
+  addedBy   User?       @relation("PlantAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
   species   Species     @relation(fields: [speciesId], references: [id])
   events    CareEvent[]
   notes     Note[]
@@ -184,11 +194,12 @@ model CareEvent {
   doneAt     DateTime  @default(now())
   /// Día local de la tarea (para que completar sea idempotente en jardines compartidos)
   taskDay    String?
-  doneById   String    @db.Uuid
+  /// null si la persona borró su cuenta
+  doneById   String?   @db.Uuid
   snoozeDays Int?
   amountMl   Int?
   plant      UserPlant @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  doneBy     User      @relation(fields: [doneById], references: [id])
+  doneBy     User?     @relation(fields: [doneById], references: [id], onDelete: SetNull)
 
   @@unique([plantId, type, taskDay])
   @@index([plantId, type, doneAt])
@@ -197,13 +208,14 @@ model CareEvent {
 model Note {
   id        String    @id @default(uuid()) @db.Uuid
   plantId   String    @db.Uuid
-  authorId  String    @db.Uuid
+  /// null si la persona borró su cuenta
+  authorId  String?   @db.Uuid
   text      String?
   /// Claves de las fotos en el almacenamiento
   photoKeys String[]  @map("photoUrls")
   createdAt DateTime  @default(now())
   plant     UserPlant @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  author    User      @relation(fields: [authorId], references: [id])
+  author    User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([plantId, createdAt])
 }
@@ -223,6 +235,8 @@ model Diagnosis {
   result     Json?
   /// questions | done | resolved
   status     String    @default("questions")
+  /// Quién hizo la revisión
+  createdById String?  @db.Uuid
   followUpAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt

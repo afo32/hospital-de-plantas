@@ -10,7 +10,9 @@ Monorepo con tres paquetes:
 | `apps/api` | Servidor | NestJS 12, Prisma 7, PostgreSQL 16 |
 | `packages/shared` | Catálogos y esquemas compartidos | TypeScript + Zod |
 
-**Estado: fase 6 de 7.**
+**Estado: las 7 fases están hechas.** Falta publicar: [docs/railway.md](docs/railway.md) → [docs/push-firebase.md](docs/push-firebase.md) → [docs/play-store.md](docs/play-store.md).
+
+- Fase 7: jardines compartidos (varios jardines, invitaciones por código o enlace, permisos Dueño / Cuida / Solo mira, actividad de los últimos 30 días), avisos push agrupados de lo que hacen los demás ("Ana · Mi jardín: Regó Monstera y Pothos") con Expo + Firebase, avisos locales de todos tus jardines, borrar cuenta, política de privacidad y página de borrado (`/v1/privacidad`, `/v1/borrar-cuenta`), perfiles de EAS para producción y guías de Railway, Firebase y Google Play.
 
 - Fase 6: pestaña Salud con revisión por fotos: Claude mira hasta 3 fotos, pregunta por la tierra, el riego y los cambios recientes, y da diagnóstico, tratamiento paso a paso, cambios de cuidados y fecha de revisión (con aviso). Notas con texto y hasta 4 fotos, foto propia de cada planta, fotos en Cloudflare R2 o en disco ([docs/fotos-r2.md](docs/fotos-r2.md)).
 
@@ -100,17 +102,9 @@ npm run typecheck   # tipos de los tres paquetes
 npm test            # tests del API
 ```
 
-## 7. Desplegar el API en Railway (cuando quieras)
+## 7. Desplegar el API en Railway
 
-1. Sube el repo a GitHub.
-2. En https://railway.com → **New Project → Deploy from GitHub repo** → elige el repo.
-3. En el mismo proyecto añade **Database → PostgreSQL** (y, desde la fase 5, **Redis**).
-4. En el servicio del API → **Variables**:
-   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (referencia a la base de datos)
-   - `NODE_ENV` = `production`
-   - el resto de `apps/api/.env.example` según la fase (desde la fase 6, las `R2_*`: en Railway el disco se borra en cada despliegue)
-5. El archivo `apps/api/railway.json` ya indica cómo construir, aplicar migraciones antes de cada despliegue y arrancar. En **Settings → Config-as-code** apunta a `apps/api/railway.json` y deja el *Root Directory* vacío (la raíz del repo).
-6. En **Settings → Networking → Generate Domain** obtienes la URL pública; ponla en `apps/mobile/.env` como `EXPO_PUBLIC_API_URL=https://tu-api.up.railway.app/v1`.
+Guía completa paso a paso en [docs/railway.md](docs/railway.md): proyecto desde GitHub, Postgres, variables (incluidas las `R2_*`, porque en Railway el disco se borra en cada despliegue), dominio público y cómo apuntar las builds de `eas.json` a esa URL. Redis no hace falta.
 
 ## Estructura
 
@@ -138,8 +132,11 @@ hospital-de-plantas/
 │     ├─ notes/                notas con fotos
 │     ├─ diagnosis/            revisión de salud con Claude (fotos → preguntas → tratamiento)
 │     ├─ ai/ask.ts             llamada a Claude con salida estructurada
+│     ├─ sharing/              jardines compartidos: miembros, invitaciones, actividad, GET /me/reminders
+│     ├─ push/                 avisos push por Expo (FCM), agrupados por persona
+│     ├─ legal/                /v1/privacidad y /v1/borrar-cuenta (Google Play)
 │     ├─ usage/                límites diarios por usuario
-│     └─ users/                GET y PATCH /v1/me
+│     └─ users/                GET, PATCH y DELETE /v1/me, tokens de push
 └─ apps/mobile/src/
    ├─ app/                     pantallas (Expo Router)
    │  ├─ (tabs)/index.tsx      Mi jardín (Hoy / Mis plantas) + botón +
@@ -152,6 +149,9 @@ hospital-de-plantas/
    │  ├─ light-meter.tsx       Medidor de luz
    │  ├─ diagnose/[plantId].tsx  Revisión de salud: fotos y síntomas
    │  ├─ diagnosis/[id].tsx    Preguntas y diagnóstico con tratamiento
+   │  ├─ gardens/index.tsx     Tus jardines
+   │  ├─ gardens/[id].tsx      Personas, permisos, invitaciones y actividad de un jardín
+   │  ├─ unirse/               Unirse con código o con el enlace hospitaldeplantas://unirse/CODIGO
    │  └─ species/[id].tsx      Ficha Info de una especie
    │  ├─ (auth)/login.tsx      Entrar
    │  ├─ (auth)/register.tsx   Crear cuenta
@@ -164,6 +164,8 @@ hospital-de-plantas/
       ├─ notifications.ts      avisos locales (riego, abono, trasplante, helada, revisiones)
       ├─ health.ts             notas, fotos y revisiones de salud
       ├─ media.ts              elegir fotos, reducirlas y mostrarlas
+      ├─ sharing.ts            jardines compartidos e invitaciones
+      ├─ push.ts               registrar el móvil para avisos push
       └─ location.ts           ubicación por GPS o por ciudad
 ```
 
@@ -176,6 +178,8 @@ hospital-de-plantas/
 | Pl@ntNet | Identificar por fotos | `PLANTNET_API_KEY` | Gratis hasta 500/día |
 | Claude (Anthropic) | Ficha Info y revisiones de salud | `ANTHROPIC_API_KEY` | De pago por uso: ficha una vez por especie; unos 5-10 céntimos por revisión completa (máx. 3 al día por persona, `DIAGNOSE_DAILY_LIMIT`) |
 | Cloudflare R2 | Guardar las fotos | `R2_*` | Gratis hasta 10 GB |
+| Expo Push + Firebase | Avisos del jardín compartido | Clave en EAS ([docs/push-firebase.md](docs/push-firebase.md)) | Gratis |
+| Railway | Servidor y base de datos | — | ~5-8 $/mes |
 | Google | Inicio de sesión | `GOOGLE_WEB_CLIENT_ID` | Gratis |
 | Open-Meteo | Tiempo y búsqueda de ciudades | No | Gratis (uso no comercial) |
 
@@ -192,4 +196,4 @@ Pergamino, musgo, corteza y oro viejo. Titulares en *Cormorant Garamond*, texto 
 4. ~~Mi jardín: cuestionario, motor de cuidado, tareas, posponer, calendario~~ ✅
 5. ~~Clima, luxómetro, notificaciones y modo sin conexión~~ ✅
 6. ~~Salud (diagnóstico con IA) y notas con fotos~~ ✅
-7. Jardín compartido, pruebas y publicación
+7. ~~Jardín compartido, avisos push y preparación para publicar~~ ✅
