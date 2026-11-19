@@ -23,7 +23,7 @@ En el mismo proyecto: **+ Create → Database → PostgreSQL**. Railway crea el 
 
 Abre el servicio del repo (no el de Postgres):
 
-1. **Settings → Config-as-code → Railway Config File**: escribe `apps/api/railway.json`. Ese archivo ya dice cómo construir, aplicar las migraciones antes de cada despliegue y comprobar que arranca (`/v1/health`).
+1. **Settings → Config-as-code → Railway Config File**: déjalo **vacío**. Railway lee solo el `railway.json` de la raíz del repo, que dice cómo construir (`npm run build`), aplicar las migraciones antes de cada despliegue, arrancar (`npm start`) y comprobar que responde (`/v1/health`).
 2. **Settings → Source → Root Directory**: déjalo vacío (la raíz del repo).
 3. **Variables → Raw Editor**, pega esto y cambia los valores:
 
@@ -93,6 +93,7 @@ Instala ese APK. Es una app normal (sin Metro), conectada a Railway: funciona fu
 
 | Lo que ves | Qué pasa |
 |---|---|
+| `railpack process exited with an error` | Railway no encuentra cómo arrancar (*No start command*). Comprueba que el repo tiene `railway.json` en la raíz y que **Config File** está vacío o dice `railway.json`. Si no, copia aquí las líneas de **Build Logs** justo encima del error. |
 | El despliegue falla en `prisma migrate deploy` | `DATABASE_URL` no apunta a Postgres. Revisa que pusiste `${{Postgres.DATABASE_URL}}`. |
 | `Variables de entorno no válidas` en los logs | Falta una variable obligatoria o el secreto es corto. El mensaje dice cuál. |
 | La app dice "No se pudo conectar con el servidor" | La URL de `eas.json` no termina en `/v1`, o la build se hizo antes de cambiarla. |
