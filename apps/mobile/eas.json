@@ -17,8 +17,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://CAMBIA-ESTO.up.railway.app/v1",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "CAMBIA-ESTO.apps.googleusercontent.com"
+        "EXPO_PUBLIC_API_URL": "api-production-ba2d29f3.up.railway.app/v1",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "1051586701895-2kf6kfjohrcsaabsqdmfhl69ng03ffac.apps.googleusercontent.com"
       }
     },
     "production": {

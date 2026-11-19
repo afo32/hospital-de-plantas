@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "144848281840",
+    "project_id": "hospital-de-plantas-a77dd",
+    "storage_bucket": "hospital-de-plantas-a77dd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:144848281840:android:9df9d4457dd82c35a52235",
+        "android_client_info": {
+          "package_name": "com.hospitaldeplantas.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBkzwqxg0_gr0PTr9v1fkpj9_cIQJdn-E4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
