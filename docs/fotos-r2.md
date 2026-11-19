@@ -62,12 +62,12 @@ Si sale `Fotos en disco: …`, falta alguna de las tres primeras variables.
 
 ## Problemas típicos
 
-| Lo que ves | Qué pasa |
-|---|---|
-| `InvalidAccessKeyId` o `SignatureDoesNotMatch` en la terminal del API | Access Key o Secret mal copiados (sin espacios al principio o al final). |
-| `NoSuchBucket` | El bucket no se llama igual que `R2_BUCKET`. |
-| `AccessDenied` | El token no tiene **Object Read & Write** o no incluye ese bucket. |
-| Las fotos que subiste antes de configurar R2 ya no se ven | Estaban en `apps/api/uploads`. Vuelve a subirlas, o cópialas al bucket con la misma ruta de carpetas. |
+| Lo que ves                                                            | Qué pasa                                                                                              |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `InvalidAccessKeyId` o `SignatureDoesNotMatch` en la terminal del API | Access Key o Secret mal copiados (sin espacios al principio o al final).                              |
+| `NoSuchBucket`                                                        | El bucket no se llama igual que `R2_BUCKET`.                                                          |
+| `AccessDenied`                                                        | El token no tiene **Object Read & Write** o no incluye ese bucket.                                    |
+| Las fotos que subiste antes de configurar R2 ya no se ven             | Estaban en `apps/api/uploads`. Vuelve a subirlas, o cópialas al bucket con la misma ruta de carpetas. |
 
 ## Cuánto ocupa
 
