@@ -3,7 +3,9 @@ import { LightSensor } from 'expo-sensors';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { useAuth } from '@/auth/AuthProvider';
 import { AppText } from '@/components/AppText';
+import { LightAdviceCard } from '@/components/LightAdviceCard';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { SunIcon } from '@/components/icons';
@@ -29,6 +31,10 @@ export default function LightMeterScreen() {
   const [plant, setPlant] = useState<PlantDetail | null>(null);
   const [range, setRange] = useState<{ min: number; ideal: number; max: number } | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Medida fijada para pedir consejos (el número en directo baila) */
+  const [frozen, setFrozen] = useState<number | null>(null);
+  const [estimated, setEstimated] = useState<number | null>(null);
+  const { user } = useAuth();
   const samples = useRef<number[]>([]);
 
   useEffect(() => {
@@ -60,18 +66,19 @@ export default function LightMeterScreen() {
     return () => sub?.remove();
   }, []);
 
-  const zone = lux != null ? zoneOf(lux) : null;
+  const zone = (frozen ?? lux) != null ? zoneOf((frozen ?? lux)!) : null;
+  const verdictLux = frozen ?? lux;
   const verdict =
-    lux == null || !range
+    verdictLux == null || !range
       ? null
-      : lux < range.min
+      : verdictLux < range.min
         ? {
-            text: `Le falta luz: necesita al menos ${range.min.toLocaleString('es-ES')} lux. Acércala a la ventana.`,
+            text: `Le falta luz: necesita al menos ${range.min.toLocaleString('es-ES')} lux.`,
             color: colors.berry,
           }
-        : lux > range.max
+        : verdictLux > range.max
           ? {
-              text: `Demasiada luz: por encima de ${range.max.toLocaleString('es-ES')} lux puede quemarse. Busca luz filtrada.`,
+              text: `Demasiada luz: por encima de ${range.max.toLocaleString('es-ES')} lux puede quemarse.`,
               color: colors.ember,
             }
           : {
@@ -79,11 +86,13 @@ export default function LightMeterScreen() {
               color: colors.moss,
             };
 
+  const shown = frozen ?? lux;
   const save = async () => {
-    if (!plantId || lux == null || !zone) return;
+    const value = frozen ?? lux ?? estimated;
+    if (!plantId || value == null) return;
     setSaving(true);
     try {
-      await updatePlant(plantId, { lightLux: lux, lightLevel: zone.level });
+      await updatePlant(plantId, { lightLux: value, lightLevel: zoneOf(value).level });
       router.back();
     } catch (err) {
       Alert.alert('No se pudo guardar', err instanceof Error ? err.message : 'Inténtalo de nuevo.');
@@ -125,12 +134,17 @@ export default function LightMeterScreen() {
         </Card>
       ) : null}
 
-      {available && lux != null && zone ? (
+      {available && shown != null && zone ? (
         <Card style={styles.meter}>
           <SunIcon color={zone.color} size={40} />
           <AppText variant="hero" color={colors.mossDeep}>
-            {lux.toLocaleString('es-ES')} lux
+            {shown!.toLocaleString('es-ES')} lux
           </AppText>
+          {frozen != null ? (
+            <AppText variant="label" color={colors.gold}>
+              MEDIDA FIJADA
+            </AppText>
+          ) : null}
           <AppText variant="heading" color={zone.color}>
             {zone.label}
           </AppText>
@@ -152,7 +166,7 @@ export default function LightMeterScreen() {
                 ]}
               />
             ) : null}
-            <View style={[styles.needle, { left: `${(Math.min(lux, SCALE_MAX) / SCALE_MAX) * 100}%` }]} />
+            <View style={[styles.needle, { left: `${(Math.min(shown!, SCALE_MAX) / SCALE_MAX) * 100}%` }]} />
           </View>
           <View style={styles.scaleLabels}>
             <AppText variant="small" color={colors.barkSoft}>
@@ -184,8 +198,34 @@ export default function LightMeterScreen() {
 
       {available && lux == null ? <ActivityIndicator color={colors.moss} /> : null}
 
-      {plantId && available && lux != null ? (
-        <Button label={`Guardar para ${plant?.plant.name ?? 'la planta'}`} onPress={save} loading={saving} />
+      {available && lux != null && range ? (
+        frozen == null ? (
+          <Button label="Fijar esta medida" variant="outline" onPress={() => setFrozen(lux)} />
+        ) : (
+          <Button label="Volver a medir" variant="ghost" onPress={() => setFrozen(null)} />
+        )
+      ) : null}
+
+      {/* Consejos: con la medida fijada fuera de su rango, o sin sensor (estimando por las respuestas) */}
+      {range && plant && ((frozen != null && frozen !== null && (frozen < range.min || frozen > range.max)) || available === false) ? (
+        <LightAdviceCard
+          key={frozen ?? 'manual'}
+          lux={available === false ? null : frozen}
+          range={range}
+          outdoor={plant.plant.location === 'outdoor'}
+          southern={(user?.lat ?? 40) < 0}
+          month={new Date().getMonth() + 1}
+          plantName={plant.plant.name}
+          onAdvice={(a) => setEstimated(a.estimated ? a.lux : null)}
+        />
+      ) : null}
+
+      {plantId && ((available && lux != null) || estimated != null) ? (
+        <Button
+          label={`Guardar ${frozen != null ? 'esta medida ' : estimated != null && !available ? 'la estimación ' : ''}para ${plant?.plant.name ?? 'la planta'}`}
+          onPress={save}
+          loading={saving}
+        />
       ) : null}
     </ScrollView>
   );

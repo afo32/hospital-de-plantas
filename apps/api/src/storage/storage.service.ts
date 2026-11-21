@@ -6,12 +6,12 @@ import { dirname, join, resolve } from 'node:path';
 import { env } from '../config/env.js';
 
 /** Tipos de foto: de la planta, de una nota o de un diagnóstico. */
-export type PhotoKind = 'plant' | 'note' | 'diag';
+export type PhotoKind = 'plant' | 'note' | 'diag' | 'prop';
 
 /** Tamaño máximo de una foto ya decodificada (el móvil las reduce a ~300 KB). */
 const MAX_BYTES = 6 * 1024 * 1024;
 const WEEK_S = 7 * 24 * 3600;
-const KEY_RE = /^(plant|note|diag)\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/;
+const KEY_RE = /^(plant|note|diag|prop)\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/;
 
 const CONTENT_TYPES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' } as const;
 type Ext = keyof typeof CONTENT_TYPES;

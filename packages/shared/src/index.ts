@@ -10,3 +10,5 @@ export * from './garden.js';
 export * from './weather.js';
 export * from './health.js';
 export * from './sharing.js';
+export * from './light.js';
+export * from './propagation.js';

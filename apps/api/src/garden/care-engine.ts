@@ -18,6 +18,8 @@ export type PlantFacts = {
   hasDrainage: boolean;
   plantHeightCm: number | null;
   plantWidthCm: number | null;
+  /** Señales de trasplante marcadas por la persona */
+  repotSigns?: string[];
 };
 
 export type EngineInput = {
@@ -254,7 +256,19 @@ export function computeRepot(input: EngineInput, pot: CarePlan['pot']): CarePlan
     if (!ok) next = next < nextSpring ? nextSpring : nextMonthStart(next, springMonth, 15);
     if (next < today) next = inSpring ? today : nextSpring;
   }
-  return { everyMonths, lastDay: input.lastRepotDay, nextDay: next, note };
+
+  // Lo que la persona ha visto en la planta manda sobre el calendario.
+  const signs = input.plant.repotSigns ?? [];
+  if (signs.length >= 2) {
+    next = today;
+    note = inSpring
+      ? `Has marcado ${signs.length} señales: necesita trasplante ya. Es buena época.`
+      : `Has marcado ${signs.length} señales: necesita trasplante. Si puedes, hazlo ya; en pleno invierno y con la planta parada, puedes esperar a principios de primavera regando con cuidado.`;
+  } else if (signs.length === 1) {
+    next = minDay(next, nextSpring) ?? nextSpring;
+    note = `Has marcado 1 señal: aún puede esperar, pero vigílala. Si aparece otra, toca trasplantar. ${note}`;
+  }
+  return { everyMonths, lastDay: input.lastRepotDay, nextDay: next, note, signs, urgent: signs.length >= 2 };
 }
 
 const r = (n: number) => Math.round(n);

@@ -10,3 +10,6 @@ apps/api/uploads/
 # Claves privadas: nunca al repositorio
 apps/mobile/play-service-account.json
 *firebase-adminsdk*.json
+
+# temporal de Claude
+.claude-tmp/

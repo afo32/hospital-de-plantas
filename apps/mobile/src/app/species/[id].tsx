@@ -116,6 +116,11 @@ export default function SpeciesScreen() {
           router.push({ pathname: '/plant-setup/[speciesId]', params: { speciesId: species.id, name: title } })
         }
       />
+      <Button
+        label="Criarla desde semilla o esqueje"
+        variant="outline"
+        onPress={() => router.push({ pathname: '/crianza/nueva', params: { speciesId: species.id, name: title } })}
+      />
 
       {detail.profileStatus === 'generating' ? (
         <Card style={styles.generating}>
@@ -139,7 +144,7 @@ export default function SpeciesScreen() {
 
       {error ? <AppText color={colors.berry}>{error}</AppText> : null}
 
-      {profile ? <SpeciesProfileView profile={profile} /> : null}
+      {profile ? <SpeciesProfileView profile={profile} speciesId={species.id} /> : null}
     </ScrollView>
   );
 }

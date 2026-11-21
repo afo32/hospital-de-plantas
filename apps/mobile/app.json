@@ -63,7 +63,8 @@
         {
           "color": "#4F6B3A"
         }
-      ]
+      ],
+      "./plugins/optional-hardware.js"
     ],
     "experiments": {
       "typedRoutes": true,

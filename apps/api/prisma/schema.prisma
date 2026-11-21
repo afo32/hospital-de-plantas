@@ -81,9 +81,10 @@ model Garden {
   name      String
   createdAt DateTime @default(now())
 
-  members GardenMember[]
-  plants  UserPlant[]
-  invites GardenInvite[]
+  members      GardenMember[]
+  plants       UserPlant[]
+  invites      GardenInvite[]
+  propagations Propagation[]
 }
 
 model GardenMember {
@@ -132,7 +133,9 @@ model Species {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  plants UserPlant[]
+  plants       UserPlant[]
+  guides       PropagationGuide[]
+  propagations Propagation[]
 
   @@index([category])
 }
@@ -169,6 +172,9 @@ model UserPlant {
   fertilizeEveryDays Int?
   repotEveryMonths   Int?
   snoozedUntil       DateTime?
+  /// Señales de trasplante marcadas en la última comprobación (REPOT_SIGNS)
+  repotSigns         String[]  @default([])
+  repotSignsCheckedAt DateTime?
   archivedAt         DateTime?
   /// Quién la añadió al jardín
   addedById          String?   @db.Uuid
@@ -243,6 +249,87 @@ model Diagnosis {
   plant      UserPlant @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
   @@index([plantId, createdAt])
+}
+
+/// Guía de multiplicación por especie y método, escrita con IA y compartida por todos
+model PropagationGuide {
+  id        String   @id @default(uuid()) @db.Uuid
+  speciesId String   @db.Uuid
+  /// seed | cutting | division | layering
+  method    String
+  guide     Json
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  species   Species  @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+
+  @@unique([speciesId, method])
+}
+
+/// Una crianza en curso: siembra, esqueje, división o acodo
+model Propagation {
+  id            String    @id @default(uuid()) @db.Uuid
+  gardenId      String    @db.Uuid
+  speciesId     String    @db.Uuid
+  /// seed | cutting | division | layering
+  method        String
+  name          String?
+  /// Semillas sembradas o esquejes puestos
+  count         Int       @default(1)
+  /// Cuántas han germinado o enraizado
+  successCount  Int?
+  /// YYYY-MM-DD
+  startDay      String
+  stageIndex    Int       @default(0)
+  stageStartDay String
+  /// Copia de la guía al empezar (no cambia aunque se regenere)
+  plan          Json
+  /// Última vez que se hizo cada tarea: { "etapa:tarea": "YYYY-MM-DD" }
+  tasksDone     Json      @default("{}")
+  /// active | done | failed
+  status        String    @default("active")
+  finishedAt    DateTime?
+  /// Planta de Mi jardín que salió de esta crianza
+  plantId       String?   @db.Uuid
+  createdById   String?   @db.Uuid
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  garden        Garden    @relation(fields: [gardenId], references: [id], onDelete: Cascade)
+  species       Species   @relation(fields: [speciesId], references: [id])
+  logs          PropagationLog[]
+
+  @@index([gardenId, status])
+}
+
+/// Diario de una crianza: notas, fotos y cambios de etapa
+model PropagationLog {
+  id            String      @id @default(uuid()) @db.Uuid
+  propagationId String      @db.Uuid
+  authorId      String?     @db.Uuid
+  /// note | stage | done | failed
+  kind          String      @default("note")
+  stageIndex    Int
+  text          String?
+  photoKeys     String[]
+  createdAt     DateTime    @default(now())
+  propagation   Propagation @relation(fields: [propagationId], references: [id], onDelete: Cascade)
+
+  @@index([propagationId, createdAt])
+}
+
+/// Avisos de contenido de IA incorrecto u ofensivo (fichas, diagnósticos, guías)
+model ContentReport {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @db.Uuid
+  /// profile | diagnosis | guide
+  targetType String
+  targetId   String
+  reason     String
+  details    String?
+  /// open | reviewed
+  status     String   @default("open")
+  createdAt  DateTime @default(now())
+
+  @@index([status, createdAt])
 }
 
 /// Clima cacheado por celda de ~10 km (lat/lon redondeadas a 0,1°)

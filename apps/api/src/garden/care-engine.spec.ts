@@ -200,3 +200,28 @@ describe('clima en interior', () => {
     expect(plan.climate?.alerts).toHaveLength(0);
   });
 });
+
+describe('señales de trasplante', () => {
+  it('con 2 señales toca trasplantar hoy, aunque el calendario diga más adelante', () => {
+    const plan = computeCarePlan(base({ today: '2026-11-21', plant: { ...base().plant, repotSigns: ['roots_out', 'dries_fast'] } }));
+    expect(plan.repot.urgent).toBe(true);
+    expect(plan.repot.nextDay).toBe('2026-11-21');
+    expect(plan.repot.note).toContain('2 señales');
+    expect(plan.repot.note).toContain('invierno');
+  });
+
+  it('con 1 señal no es urgente pero adelanta a la próxima primavera como tarde', () => {
+    const plan = computeCarePlan(
+      base({ today: '2026-11-21', lastRepotDay: '2026-06-01', plant: { ...base().plant, repotSigns: ['stalled'] } }),
+    );
+    expect(plan.repot.urgent).toBe(false);
+    expect(plan.repot.nextDay! <= '2027-03-15').toBe(true);
+    expect(plan.repot.note).toContain('1 señal');
+  });
+
+  it('sin señales, el calendario de siempre', () => {
+    const plan = computeCarePlan(base());
+    expect(plan.repot.signs).toEqual([]);
+    expect(plan.repot.urgent).toBe(false);
+  });
+});

@@ -109,3 +109,15 @@ export function SunIcon({ color, size = 22 }: IconProps) {
     </Svg>
   );
 }
+
+/** Semilla con un brote saliendo: pestaña "Crianza". */
+export function SeedIcon({ color, size = 26 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 26 26" fill="none">
+      <Path d="M13 24c-4.4 0-7-2.6-7-5.6 0-3.4 3.3-5.9 7-5.9s7 2.5 7 5.9c0 3-2.6 5.6-7 5.6z" fill={color} opacity={0.75} />
+      <Path d="M13 13V7" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M13 8c0-3.2-2.3-5-5.5-5 0 3.2 2.3 5 5.5 5z" fill={color} />
+      <Path d="M13 9.5c0-2.7 2-4.5 5-4.5 0 2.7-2 4.5-5 4.5z" fill={color} />
+    </Svg>
+  );
+}

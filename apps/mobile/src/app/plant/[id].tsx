@@ -224,7 +224,7 @@ export default function PlantScreen() {
 
       {tab === 'info' ? (
         species?.profile ? (
-          <SpeciesProfileView profile={species.profile} />
+          <SpeciesProfileView profile={species.profile} speciesId={plant.species.id} />
         ) : (
           <ActivityIndicator color={colors.moss} />
         )

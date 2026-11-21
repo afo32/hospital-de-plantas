@@ -23,6 +23,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { PushService } from '../push/push.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { WeatherService } from '../weather/weather.service.js';
+import { parseDone, parsePlan, reminderDays } from '../propagation/schedule.js';
 import { computeCarePlan } from './care-engine.js';
 
 /** Cuántos días por delante se muestran en "Próximamente". */
@@ -255,7 +256,10 @@ export class GardenService {
 
   async updatePlant(userId: string, plantId: string, input: UpdatePlantInput): Promise<PlantDetail> {
     await this.loadPlant(userId, plantId, true);
-    await this.prisma.userPlant.update({ where: { id: plantId }, data: input });
+    await this.prisma.userPlant.update({
+      where: { id: plantId },
+      data: { ...input, ...(input.repotSigns ? { repotSignsCheckedAt: new Date() } : {}) },
+    });
     return this.getPlant(userId, plantId);
   }
 
@@ -293,6 +297,24 @@ export class GardenService {
   }
 
   /* ---------- Para otros módulos (salud, notas) ---------- */
+
+  /** Comprueba que perteneces al jardín (y que puedes editar si `write`). */
+  assertGarden(userId: string, gardenId: string, write = false): Promise<void> {
+    return this.assertMember(userId, gardenId, write);
+  }
+
+  /** ¿Puede esta persona cambiar cosas en el jardín? */
+  async canWrite(userId: string, gardenId: string): Promise<boolean> {
+    const m = await this.prisma.gardenMember.findUnique({ where: { gardenId_userId: { gardenId, userId } } });
+    return !!m && m.role !== 'viewer';
+  }
+
+  /** Día de hoy en la zona horaria de la persona. */
+  async todayFor(userId: string): Promise<{ today: string; tz: string; southern: boolean }> {
+    const u = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true, lat: true } });
+    const tz = u.timezone || 'Europe/Madrid';
+    return { today: localDay(new Date(), tz), tz, southern: (u.lat ?? 40) < 0 };
+  }
 
   /** Comprueba que puedes ver (o editar, con `write`) la planta y la devuelve. */
   accessPlant(userId: string, plantId: string, write = false): Promise<PlantWithRelations> {
@@ -353,7 +375,7 @@ export class GardenService {
         type === 'water'
           ? { lastWateredAt: when, snoozedUntil: null }
           : type === 'repot'
-            ? { lastRepottedAt: when }
+            ? { lastRepottedAt: when, repotSigns: [] }
             : {},
     });
     return this.getPlant(userId, plantId);
@@ -474,10 +496,10 @@ export class GardenService {
     const ctx = await this.context(userId);
     const to = addDays(ctx.today, days);
     const plants = await this.plantsOfGarden(gardenId);
-    type DayEntry = { water: string[]; fertilize: string[]; repot: string[]; checkup: string[] };
+    type DayEntry = { water: string[]; fertilize: string[]; repot: string[]; checkup: string[]; propagation: string[] };
     const byDay = new Map<string, DayEntry>();
     const entryOf = (day: string) => {
-      const entry = byDay.get(day) ?? { water: [], fertilize: [], repot: [], checkup: [] };
+      const entry = byDay.get(day) ?? { water: [], fertilize: [], repot: [], checkup: [], propagation: [] };
       byDay.set(day, entry);
       return entry;
     };
@@ -517,6 +539,23 @@ export class GardenService {
       if (!entry.checkup.includes(name)) entry.checkup.push(name);
     }
 
+    // Crianzas en marcha: tareas de su etapa y aviso para revisar si toca pasar de etapa.
+    const propagations = await this.prisma.propagation.findMany({
+      where: { gardenId, status: 'active' },
+      include: { species: { select: { commonNames: true, scientificName: true } } },
+    });
+    for (const pr of propagations) {
+      const plan = parsePlan(pr.plan);
+      if (!plan) continue;
+      const name = pr.name ?? pr.species.commonNames[0] ?? pr.species.scientificName;
+      const days = reminderDays(
+        { name, plan, stageIndex: pr.stageIndex, stageStartDay: pr.stageStartDay, done: parseDone(pr.tasksDone) },
+        ctx.today,
+        to,
+      );
+      for (const [day, line] of days) entryOf(day).propagation.push(line);
+    }
+
     return {
       reminderHour: ctx.user.reminderHour,
       notifyWater: ctx.user.notifyWater,
@@ -542,11 +581,12 @@ export class GardenService {
     const alerts = new Map<string, Reminders['alerts'][number]>();
     for (const r of parts) {
       for (const d of r.days) {
-        const e = byDay.get(d.day) ?? { day: d.day, water: [], fertilize: [], repot: [], checkup: [] };
+        const e = byDay.get(d.day) ?? { day: d.day, water: [], fertilize: [], repot: [], checkup: [], propagation: [] };
         e.water.push(...d.water);
         e.fertilize.push(...d.fertilize);
         e.repot.push(...d.repot);
         e.checkup.push(...d.checkup);
+        e.propagation.push(...d.propagation);
         byDay.set(d.day, e);
       }
       for (const a of r.alerts) {

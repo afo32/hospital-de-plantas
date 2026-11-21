@@ -159,13 +159,18 @@ export class SharingService {
       where: { gardenId },
       select: { photoKey: true, notes: { select: { photoKeys: true } }, diagnoses: { select: { photoKeys: true } } },
     });
+    const logs = await this.prisma.propagationLog.findMany({
+      where: { propagation: { gardenId } },
+      select: { photoKeys: true },
+    });
     await this.prisma.$transaction([
       this.prisma.userPlant.deleteMany({ where: { gardenId } }),
       this.prisma.garden.delete({ where: { id: gardenId } }),
     ]);
-    await this.storage.remove(
-      plants.flatMap((p) => [p.photoKey, ...p.notes.flatMap((n) => n.photoKeys), ...p.diagnoses.flatMap((d) => d.photoKeys)]),
-    );
+    await this.storage.remove([
+      ...plants.flatMap((p) => [p.photoKey, ...p.notes.flatMap((n) => n.photoKeys), ...p.diagnoses.flatMap((d) => d.photoKeys)]),
+      ...logs.flatMap((l) => l.photoKeys),
+    ]);
   }
 
   /* ---------- Miembros ---------- */

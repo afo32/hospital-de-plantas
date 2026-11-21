@@ -18,6 +18,7 @@ import { Collapsible } from '@/components/Collapsible';
 import { OptionList } from '@/components/OptionList';
 import { PhotoStrip } from '@/components/PhotoStrip';
 import { PhotoViewer } from '@/components/PhotoViewer';
+import { ReportLink } from '@/components/ReportSheet';
 import { TextField } from '@/components/TextField';
 import { VineDivider } from '@/components/VineDivider';
 import { WaitingCard } from '@/components/WaitingCard';
@@ -371,6 +372,8 @@ function ResultView({ d, result: r }: { d: Diagnosis; result: DiagnosisResult })
           Si no mejora: {r.whenToWorry}
         </AppText>
       </Card>
+
+      <ReportLink target={{ targetType: 'diagnosis', targetId: d.id }} label="Informar de un problema con este diagnóstico" />
 
       {t ? (
         <Collapsible title="Lo que vi y lo que respondiste">

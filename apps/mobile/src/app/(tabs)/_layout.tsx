@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router/js-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RoundDoorIcon, SearchLeafIcon, SproutIcon } from '@/components/icons';
+import { RoundDoorIcon, SearchLeafIcon, SeedIcon, SproutIcon } from '@/components/icons';
 import { colors, fonts } from '@/theme/tokens';
 
 export default function TabsLayout() {
@@ -26,6 +26,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{ title: 'Mi jardín', tabBarIcon: ({ color }) => <SproutIcon color={color} /> }}
+      />
+      <Tabs.Screen
+        name="crianza"
+        options={{ title: 'Crianza', tabBarIcon: ({ color }) => <SeedIcon color={color} /> }}
       />
       <Tabs.Screen
         name="search"

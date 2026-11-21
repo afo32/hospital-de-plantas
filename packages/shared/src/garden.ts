@@ -1,5 +1,8 @@
 import { z } from 'zod';
+import { REPOT_SIGNS } from './catalog.js';
 import { speciesSummarySchema } from './species.js';
+
+const REPOT_SIGN_VALUES = REPOT_SIGNS.map((s) => s.value) as [string, ...string[]];
 import { climateSchema } from './weather.js';
 
 /** Fechas de calendario sin hora, en la zona horaria del usuario: "2026-11-15". */
@@ -45,6 +48,10 @@ export const carePlanSchema = z.object({
     lastDay: daySchema.nullable(),
     nextDay: daySchema.nullable(),
     note: z.string(),
+    /** Señales de trasplante marcadas en la última comprobación */
+    signs: z.array(z.string()).default([]),
+    /** 2 o más señales: toca trasplantar ya */
+    urgent: z.boolean().default(false),
   }),
   pot: z.object({
     verdict: z.enum(POT_VERDICTS),
@@ -116,6 +123,8 @@ export const updatePlantSchema = z.object({
   hasDrainage: z.boolean().optional(),
   plantHeightCm: z.number().min(1).max(2000).nullable().optional(),
   plantWidthCm: z.number().min(1).max(2000).nullable().optional(),
+  /** Señales de trasplante que se ven ahora (comprobación en la pestaña Cuidado) */
+  repotSigns: z.array(z.enum(REPOT_SIGN_VALUES)).max(REPOT_SIGN_VALUES.length).optional(),
 });
 export type UpdatePlantInput = z.infer<typeof updatePlantSchema>;
 

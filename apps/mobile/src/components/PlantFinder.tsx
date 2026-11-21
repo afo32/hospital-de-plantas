@@ -3,7 +3,7 @@ import { labelOf, PLANT_CATEGORIES } from '@hdp/shared';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { searchSpecies } from '@/lib/species';
+import { resolveSpecies, searchSpecies } from '@/lib/species';
 import { useOpenSpecies } from '@/lib/useOpenSpecies';
 import { colors, radius, space } from '@/theme/tokens';
 import { AppText } from './AppText';
@@ -15,13 +15,34 @@ import { SpeciesCard } from './SpeciesCard';
  * Buscador compartido por "Añadir planta" y "Buscar":
  * categorías, búsqueda por nombre y acceso a identificar con fotos.
  */
-export function PlantFinder() {
+type Props = {
+  /** Si se pasa, al tocar una especie se llama aquí (con su id guardado) en vez de abrir su ficha */
+  onPick?: (species: SpeciesSummary, id: string) => void;
+  /** Mostrar el botón de identificar con fotos (por defecto sí) */
+  showIdentify?: boolean;
+};
+
+export function PlantFinder({ onPick, showIdentify = true }: Props = {}) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<PlantCategory | null>(null);
   const [results, setResults] = useState<SpeciesSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { open, opening } = useOpenSpecies();
+  const { open: openSpecies, opening: openingSpecies } = useOpenSpecies();
+  const [picking, setPicking] = useState<string | null>(null);
+  const opening = onPick ? picking : openingSpecies;
+  const open = async (s: SpeciesSummary) => {
+    if (!onPick) return openSpecies(s);
+    if (picking) return;
+    setPicking(s.scientificName);
+    try {
+      onPick(s, await resolveSpecies(s));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo elegir la planta');
+    } finally {
+      setPicking(null);
+    }
+  };
   const requestId = useRef(0);
 
   // Busca 400 ms después de dejar de escribir; ignora respuestas de búsquedas antiguas.
@@ -71,6 +92,7 @@ export function PlantFinder() {
     <View style={styles.wrap}>
       <SearchField value={query} onChangeText={onChangeText} />
 
+      {showIdentify ? (
       <Pressable
         onPress={() => router.push('/identify')}
         accessibilityRole="button"
@@ -83,6 +105,7 @@ export function PlantFinder() {
           Haz 3 fotos: planta entera, hoja de cerca y flor o tallo
         </AppText>
       </Pressable>
+      ) : null}
 
       {!textSearch ? (
         <>

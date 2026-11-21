@@ -66,8 +66,12 @@ Sale un archivo **.aab** (el formato que pide Google Play). Descárgalo desde el
 
 Google Play vuelve a firmar la app con **su** clave, así que el SHA-1 cambia y "Continuar con Google" daría `DEVELOPER_ERROR`.
 
-1. Play Console → tu app → **Prueba y lanza → Configuración → Integridad de la aplicación → Firma de aplicaciones** → copia el **SHA-1 del certificado de la clave de firma de aplicaciones**.
-2. Google Cloud Console → **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth → Android**: paquete `com.hospitaldeplantas.app` y ese SHA-1.
+> La clave de firma solo aparece **después de subir el primer `.aab`**: haz primero el paso 6 (prueba interna) y vuelve aquí.
+
+1. Play Console → tu app → menú de la izquierda **Protegida con Play → Protección de Play Store → Gestiona la firma de aplicaciones de Play**.
+2. En **Clave de firma de aplicaciones** verás la clave **clásica** (y quizá una **anterior** y una **poscuántica**). Copia el **SHA-1** de la clásica. Si hay una *anterior*, copia también la suya.
+3. Google Cloud Console (en el proyecto de Firebase, número `1051586701895`) → **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth → Android**: paquete `com.hospitaldeplantas.app` y ese SHA-1. Crea un cliente por cada SHA-1 (clásica y anterior). La poscuántica no hace falta.
+4. La **clave de subida** no se pone en ningún cliente: solo sirve para que Google sepa que el `.aab` es tuyo.
 
 Deja también el cliente Android que ya tienes (el de tus builds de EAS). El cliente **web** no cambia.
 

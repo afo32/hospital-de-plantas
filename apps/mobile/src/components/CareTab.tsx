@@ -15,6 +15,8 @@ import { AppText } from './AppText';
 import { Button } from './Button';
 import { Card } from './Card';
 import { PotIcon, SunIcon } from './icons';
+import { MeasureGuide } from './MeasureGuide';
+import { RepotCheckSheet } from './RepotCheckSheet';
 import { MonthCalendar } from './MonthCalendar';
 import { TASK_COLORS, TaskIcon } from './TaskIcon';
 import { TextField } from './TextField';
@@ -48,6 +50,7 @@ export function CareTab({
 }: Props) {
   const { care, plant, today } = detail;
   const doneToday = (type: TaskType, last: string | null) => last === today && !!type;
+  const [checkingRepot, setCheckingRepot] = useState(false);
 
   return (
     <View style={styles.wrap}>
@@ -150,7 +153,19 @@ export function CareTab({
           <Stat label="Cada" value={`${care.repot.everyMonths} meses`} />
           <Stat label="Próximo" value={care.repot.nextDay ? shortDate(care.repot.nextDay) : 'Revisar'} />
         </View>
+        {care.repot.urgent ? (
+          <View style={styles.urgent}>
+            <AppText variant="bodyStrong" color={colors.berry}>
+              Toca trasplantar
+            </AppText>
+          </View>
+        ) : null}
         <AppText>{care.repot.note}</AppText>
+        <Button
+          label={care.repot.signs.length ? `Revisar señales (${care.repot.signs.length} marcadas)` : '¿Necesita trasplante? Comprobar señales'}
+          variant="ghost"
+          onPress={() => setCheckingRepot(true)}
+        />
         {doneToday('repot', care.repot.lastDay) ? (
           <Button
             label="Deshacer trasplante de hoy"
@@ -167,6 +182,16 @@ export function CareTab({
           />
         )}
       </Card>
+
+      <RepotCheckSheet
+        visible={checkingRepot}
+        initial={care.repot.signs}
+        onClose={() => setCheckingRepot(false)}
+        onSave={(signs) => {
+          setCheckingRepot(false);
+          void onUpdate({ repotSigns: signs as UpdatePlantInput['repotSigns'] });
+        }}
+      />
 
       {/* Maceta */}
       <PotCard detail={detail} onUpdate={onUpdate} />
@@ -240,9 +265,11 @@ function PotCard({ detail, onUpdate }: { detail: PlantDetail; onUpdate: Props['o
   const [f, setF] = useState({
     potDiameterCm: String(plant.potDiameterCm),
     potHeightCm: String(plant.potHeightCm),
+    potLengthCm: plant.potLengthCm ? String(plant.potLengthCm) : '',
     plantHeightCm: plant.plantHeightCm ? String(plant.plantHeightCm) : '',
     plantWidthCm: plant.plantWidthCm ? String(plant.plantWidthCm) : '',
   });
+  const rect = plant.potShape === 'rectangular';
   const verdictColor =
     care.pot.verdict === 'ok' ? colors.moss : care.pot.verdict === 'need_size' ? colors.gold : colors.berry;
 
@@ -252,6 +279,7 @@ function PotCard({ detail, onUpdate }: { detail: PlantDetail; onUpdate: Props['o
       await onUpdate({
         potDiameterCm: num(f.potDiameterCm),
         potHeightCm: num(f.potHeightCm),
+        ...(rect ? { potLengthCm: num(f.potLengthCm) ?? null } : {}),
         plantHeightCm: num(f.plantHeightCm) ?? null,
         plantWidthCm: num(f.plantWidthCm) ?? null,
       });
@@ -277,10 +305,14 @@ function PotCard({ detail, onUpdate }: { detail: PlantDetail; onUpdate: Props['o
       </View>
       {editing ? (
         <View style={styles.editor}>
+          <AppText variant="label" color={colors.gold}>
+            MACETA
+          </AppText>
+          <MeasureGuide kind="pot" shape={rect ? 'rectangular' : 'round'} />
           <View style={styles.row}>
             <View style={styles.flex}>
               <TextField
-                label="Maceta Ø (cm)"
+                label={rect ? 'A · Ancho (cm)' : 'A · Diámetro (cm)'}
                 keyboardType="decimal-pad"
                 value={f.potDiameterCm}
                 onChangeText={(t) => setF({ ...f, potDiameterCm: t })}
@@ -288,17 +320,31 @@ function PotCard({ detail, onUpdate }: { detail: PlantDetail; onUpdate: Props['o
             </View>
             <View style={styles.flex}>
               <TextField
-                label="Maceta alto (cm)"
+                label="B · Alto (cm)"
                 keyboardType="decimal-pad"
                 value={f.potHeightCm}
                 onChangeText={(t) => setF({ ...f, potHeightCm: t })}
               />
             </View>
+            {rect ? (
+              <View style={styles.flex}>
+                <TextField
+                  label="C · Largo (cm)"
+                  keyboardType="decimal-pad"
+                  value={f.potLengthCm}
+                  onChangeText={(t) => setF({ ...f, potLengthCm: t })}
+                />
+              </View>
+            ) : null}
           </View>
+          <AppText variant="label" color={colors.gold}>
+            PLANTA
+          </AppText>
+          <MeasureGuide kind="plant" />
           <View style={styles.row}>
             <View style={styles.flex}>
               <TextField
-                label="Planta alto (cm)"
+                label="A · Alto (cm)"
                 keyboardType="decimal-pad"
                 value={f.plantHeightCm}
                 onChangeText={(t) => setF({ ...f, plantHeightCm: t })}
@@ -306,7 +352,7 @@ function PotCard({ detail, onUpdate }: { detail: PlantDetail; onUpdate: Props['o
             </View>
             <View style={styles.flex}>
               <TextField
-                label="Planta ancho (cm)"
+                label="B · Ancho (cm)"
                 keyboardType="decimal-pad"
                 value={f.plantWidthCm}
                 onChangeText={(t) => setF({ ...f, plantWidthCm: t })}
@@ -347,6 +393,13 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
 }
 
 const styles = StyleSheet.create({
+  urgent: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F6E3DC',
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 4,
+  },
   wrap: { gap: space.md },
   title: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   stats: { flexDirection: 'row', gap: space.sm },

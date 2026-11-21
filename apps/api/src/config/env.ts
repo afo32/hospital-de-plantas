@@ -32,6 +32,8 @@ const envSchema = z.object({
   IDENTIFY_DAILY_LIMIT: z.coerce.number().int().positive().default(10),
   /** Diagnósticos de salud por usuario y día */
   DIAGNOSE_DAILY_LIMIT: z.coerce.number().int().positive().default(3),
+  /** Guías de crianza nuevas (especie + método) que cada persona puede pedir al día */
+  GUIDE_DAILY_LIMIT: z.coerce.number().int().positive().default(10),
   /* Fotos en Cloudflare R2. Si faltan, se guardan en el disco del servidor (UPLOADS_DIR). */
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),

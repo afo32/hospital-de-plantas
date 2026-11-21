@@ -124,6 +124,11 @@ export class UsersService {
       for (const p of plants) {
         keys.push(p.photoKey, ...p.notes.flatMap((n) => n.photoKeys), ...p.diagnoses.flatMap((d) => d.photoKeys));
       }
+      const logs = await this.prisma.propagationLog.findMany({
+        where: { propagation: { gardenId: { in: soloGardens } } },
+        select: { photoKeys: true },
+      });
+      keys.push(...logs.flatMap((l) => l.photoKeys));
     }
     const myNotes = await this.prisma.note.findMany({ where: { authorId: userId }, select: { id: true, photoKeys: true } });
     keys.push(...myNotes.flatMap((n) => n.photoKeys));

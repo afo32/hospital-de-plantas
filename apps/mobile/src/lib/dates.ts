@@ -60,3 +60,11 @@ export function dateTimeLabel(iso: string): string {
   const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()} · ${time}`;
 }
+
+const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** [3, 4, 5] → "marzo, abril y mayo" */
+export function monthsText(months: number[]): string {
+  const names = months.map((m) => MONTH_NAMES[m - 1]!);
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} y ${names.at(-1)}`;
+}

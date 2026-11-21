@@ -68,6 +68,19 @@ export const OVERWATERING_GUARDS = [
   { value: 'none', label: 'Nada' },
 ] as const;
 
+/** Señales de que una planta necesita trasplante, con cómo comprobarlas. */
+export const REPOT_SIGNS = [
+  { value: 'roots_out', label: 'Salen raíces por los agujeros', hint: 'Mira la base de la maceta: raíces asomando o enredadas por fuera.' },
+  { value: 'roots_top', label: 'Se ven raíces en la superficie', hint: 'Raíces gruesas por encima de la tierra o levantándola.' },
+  { value: 'water_through', label: 'El agua sale por abajo al momento', hint: 'Al regar, el agua atraviesa en segundos sin empapar la tierra.' },
+  { value: 'dries_fast', label: 'La tierra se seca en 1–2 días', hint: 'Aunque riegues bien, a los 1–2 días ya está seca a 3 cm.' },
+  { value: 'root_bound', label: 'El cepellón es un bloque de raíces', hint: 'Si la sacas con cuidado, casi no se ve tierra: solo raíces dando vueltas.' },
+  { value: 'pot_tipping', label: 'La maceta se vuelca, deforma o agrieta', hint: 'La planta pesa más que la maceta o las raíces la están empujando.' },
+  { value: 'stalled', label: 'Ha dejado de crecer en su época', hint: 'En primavera o verano no saca hojas nuevas aunque tenga luz y abono.' },
+  { value: 'old_soil', label: 'La tierra está dura o con costra blanca', hint: 'Compactada, se separa de las paredes o tiene sales blancas arriba.' },
+] as const;
+export type RepotSign = (typeof REPOT_SIGNS)[number]['value'];
+
 export const LAST_REPOT_OPTIONS = [
   { value: 'this_month', label: 'Este mes', daysAgo: 15 },
   { value: '1_6_months', label: 'Hace 1–6 meses', daysAgo: 105 },

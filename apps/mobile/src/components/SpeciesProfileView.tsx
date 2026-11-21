@@ -5,6 +5,7 @@ import { AppText } from './AppText';
 import { Card } from './Card';
 import { Collapsible } from './Collapsible';
 import { RichText } from './RichText';
+import { ReportLink } from './ReportSheet';
 
 type Profile = NonNullable<SpeciesDetail['profile']>;
 
@@ -18,7 +19,7 @@ const toxColor = (level: string) =>
         : colors.berry;
 
 /** Contenido de la ficha Info: datos rápidos, toxicidad y guía de cultivo. */
-export function SpeciesProfileView({ profile }: { profile: Profile }) {
+export function SpeciesProfileView({ profile, speciesId }: { profile: Profile; speciesId?: string | null }) {
   return (
     <>
       <AppText color={colors.barkSoft}>{profile.difficultyReason}</AppText>
@@ -85,6 +86,7 @@ export function SpeciesProfileView({ profile }: { profile: Profile }) {
       <AppText variant="small" color={colors.barkSoft} center>
         Ficha elaborada con IA a partir de fuentes botánicas. Revísala con sentido común.
       </AppText>
+      {speciesId ? <ReportLink target={{ targetType: 'profile', targetId: speciesId }} label="Informar de un error en esta ficha" /> : null}
     </>
   );
 }

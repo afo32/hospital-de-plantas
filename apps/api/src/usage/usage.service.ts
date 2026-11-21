@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 
-export type UsageKind = 'identify' | 'diagnose';
+export type UsageKind = 'identify' | 'diagnose' | 'guide';
 
 /** Contador diario por usuario para no disparar el gasto en APIs externas. */
 @Injectable()

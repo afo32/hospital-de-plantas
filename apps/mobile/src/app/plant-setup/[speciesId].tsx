@@ -17,8 +17,10 @@ import { useAuth } from '@/auth/AuthProvider';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { OptionList } from '@/components/OptionList';
+import { MeasureGuide } from '@/components/MeasureGuide';
 import { TextField } from '@/components/TextField';
 import { addPlant } from '@/lib/garden';
+import { finishPropagation } from '@/lib/propagation';
 import { apiErrorToForm } from '@/lib/forms';
 import { colors, radius, space } from '@/theme/tokens';
 
@@ -53,7 +55,7 @@ const YES_NO = [
 
 /** Cuestionario al añadir una planta. Con las respuestas, el servidor calcula su plan de cuidado. */
 export default function PlantSetupScreen() {
-  const { speciesId, name } = useLocalSearchParams<{ speciesId: string; name?: string }>();
+  const { speciesId, name, fromPropagation } = useLocalSearchParams<{ speciesId: string; name?: string; fromPropagation?: string }>();
   const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -131,10 +133,11 @@ export default function PlantSetupScreen() {
       body: (
         <>
           <OptionList options={POT_SHAPES} value={a.potShape} onChange={(v) => set('potShape', v)} />
+          <MeasureGuide kind="pot" shape={rect ? 'rectangular' : 'round'} />
           <View style={styles.row}>
             <View style={styles.flex}>
               <TextField
-                label={rect ? 'Ancho (cm)' : 'Diámetro (cm)'}
+                label={rect ? 'A · Ancho (cm)' : 'A · Diámetro (cm)'}
                 keyboardType="decimal-pad"
                 value={a.potDiameterCm}
                 onChangeText={(t) => set('potDiameterCm', t)}
@@ -144,7 +147,7 @@ export default function PlantSetupScreen() {
             {rect ? (
               <View style={styles.flex}>
                 <TextField
-                  label="Largo (cm)"
+                  label="C · Largo (cm)"
                   keyboardType="decimal-pad"
                   value={a.potLengthCm}
                   onChangeText={(t) => set('potLengthCm', t)}
@@ -154,7 +157,7 @@ export default function PlantSetupScreen() {
             ) : null}
             <View style={styles.flex}>
               <TextField
-                label="Alto (cm)"
+                label="B · Alto (cm)"
                 keyboardType="decimal-pad"
                 value={a.potHeightCm}
                 onChangeText={(t) => set('potHeightCm', t)}
@@ -162,9 +165,6 @@ export default function PlantSetupScreen() {
               />
             </View>
           </View>
-          <AppText variant="small" color={colors.barkSoft}>
-            Mide por dentro, de borde a borde. Si no tienes metro, un palmo abierto son unos 20 cm.
-          </AppText>
           <AppText variant="heading" color={colors.mossDeep}>
             Material
           </AppText>
@@ -214,10 +214,11 @@ export default function PlantSetupScreen() {
           <AppText color={colors.barkSoft}>
             Con esto sabremos si la maceta le queda bien. Si no lo sabes, puedes saltarlo y decírnoslo luego.
           </AppText>
+          <MeasureGuide kind="plant" />
           <View style={styles.row}>
             <View style={styles.flex}>
               <TextField
-                label="Alto (cm)"
+                label="A · Alto (cm)"
                 keyboardType="decimal-pad"
                 value={a.plantHeightCm}
                 onChangeText={(t) => set('plantHeightCm', t)}
@@ -226,7 +227,7 @@ export default function PlantSetupScreen() {
             </View>
             <View style={styles.flex}>
               <TextField
-                label="Ancho (cm)"
+                label="B · Ancho (cm)"
                 keyboardType="decimal-pad"
                 value={a.plantWidthCm}
                 onChangeText={(t) => set('plantWidthCm', t)}
@@ -272,6 +273,10 @@ export default function PlantSetupScreen() {
     setError('');
     try {
       const created = await addPlant(gardenId, parsed.data);
+      // Si viene de una crianza, la crianza queda terminada y enlazada a la planta nueva.
+      if (fromPropagation) {
+        await finishPropagation(fromPropagation, { result: 'done', plantId: created.plant.id }).catch(() => undefined);
+      }
       router.replace({ pathname: '/plant/[id]', params: { id: created.plant.id, welcome: '1' } });
     } catch (err) {
       setError(apiErrorToForm(err).general);

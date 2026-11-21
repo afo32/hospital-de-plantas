@@ -134,6 +134,8 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
         <Stack.Screen name="diagnosis/[id]" options={{ title: 'Salud', headerBackTitle: 'Volver' }} />
         <Stack.Screen name="gardens/index" options={{ title: 'Tus jardines' }} />
         <Stack.Screen name="gardens/[id]" options={{ title: 'Jardín', headerBackTitle: 'Volver' }} />
+        <Stack.Screen name="crianza/nueva" options={{ title: 'Nueva crianza' }} />
+        <Stack.Screen name="crianza/[id]" options={{ title: 'Crianza', headerBackTitle: 'Volver' }} />
         <Stack.Screen name="unirse/index" options={{ title: 'Unirme a un jardín' }} />
         <Stack.Screen name="unirse/[code]" options={{ title: 'Invitación' }} />
       </Stack.Protected>
