@@ -1,8 +1,11 @@
 import { Tabs } from 'expo-router/js-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RoundDoorIcon, SearchLeafIcon, SproutIcon } from '@/components/icons';
 import { colors, fonts } from '@/theme/tokens';
 
 export default function TabsLayout() {
+  // Alto de la barra de navegación del móvil (botones o gestos). La barra de pestañas se coloca encima.
+  const { bottom } = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
@@ -13,8 +16,9 @@ export default function TabsLayout() {
           backgroundColor: colors.vellum,
           borderTopColor: colors.gold,
           borderTopWidth: 1,
-          height: 76,
+          height: 68 + bottom,
           paddingTop: 8,
+          paddingBottom: bottom + 8,
         },
         tabBarLabelStyle: { fontFamily: fonts.bodySemi, fontSize: 12 },
       }}
