@@ -2,7 +2,9 @@ import { authResponseSchema, healthSchema, type AuthResponse, type HealthRespons
 import { secureStorage } from './secure-storage';
 
 /** URL base del API, desde apps/mobile/.env (EXPO_PUBLIC_API_URL). */
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/v1').replace(/\/$/, '');
+const RAW_API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/v1').trim().replace(/\/$/, '');
+/** Si la URL viene sin "https://" (p. ej. "mi-api.up.railway.app/v1"), se lo añadimos para que fetch la entienda. */
+export const API_URL = /^https?:\/\//.test(RAW_API_URL) ? RAW_API_URL : `https://${RAW_API_URL}`;
 
 const REFRESH_KEY = 'hdp.refreshToken';
 
