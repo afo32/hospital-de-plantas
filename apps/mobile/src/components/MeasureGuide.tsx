@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import Svg, { Defs, Ellipse, G, Line, Marker, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Ellipse, G, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 import { colors, fonts, radius, space } from '@/theme/tokens';
 import { AppText } from './AppText';
 
@@ -7,19 +7,32 @@ type Props = { kind: 'pot' | 'plant'; shape?: 'round' | 'rectangular' };
 
 const INK = colors.berry;
 
-function Arrows() {
+/**
+ * Línea con punta de flecha en los dos extremos.
+ * Las puntas se dibujan a mano: los Marker de react-native-svg en Android
+ * no aceptan orient="auto-start-reverse" y cierran la app.
+ */
+function Arrow({ x1, y1, x2, y2 }: { x1: number; y1: number; x2: number; y2: number }) {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const head = (x: number, y: number, a: number) => {
+    const len = 8;
+    const spread = Math.PI / 7;
+    const p1 = `${x - len * Math.cos(a - spread)},${y - len * Math.sin(a - spread)}`;
+    const p2 = `${x - len * Math.cos(a + spread)},${y - len * Math.sin(a + spread)}`;
+    return <Polygon points={`${x},${y} ${p1} ${p2}`} fill={INK} />;
+  };
   return (
-    <Defs>
-      <Marker id="a" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto-start-reverse">
-        <Polygon points="0,0 8,4 0,8" fill={INK} />
-      </Marker>
-    </Defs>
+    <G>
+      <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={INK} strokeWidth="2" />
+      {head(x2, y2, angle)}
+      {head(x1, y1, angle + Math.PI)}
+    </G>
   );
 }
 
 function Label({ x, y, text, anchor = 'middle' }: { x: number; y: number; text: string; anchor?: 'middle' | 'start' | 'end' }) {
   return (
-    <SvgText x={x} y={y} fill={INK} fontSize="13" fontFamily={fonts.bodyBold} fontWeight="bold" textAnchor={anchor}>
+    <SvgText x={x} y={y} fill={INK} fontSize="13" fontFamily={fonts.bodyBold} textAnchor={anchor}>
       {text}
     </SvgText>
   );
@@ -28,23 +41,22 @@ function Label({ x, y, text, anchor = 'middle' }: { x: number; y: number; text: 
 function PotDrawing({ rect }: { rect: boolean }) {
   return (
     <Svg width="100%" height={156} viewBox="0 0 300 156">
-      <Arrows />
       {/* maceta de lado */}
       <Path d="M60 40 H180 L168 135 H72 Z" fill={colors.ember} opacity={0.85} />
       <Rect x="54" y="32" width="132" height="14" rx="3" fill="#B5652A" />
       {/* tierra */}
       <Path d="M64 46 H176 L175 54 H65 Z" fill="#6B4A2E" />
       {/* A: boca por dentro */}
-      <Line x1="64" y1="22" x2="176" y2="22" stroke={INK} strokeWidth="2" markerStart="url(#a)" markerEnd="url(#a)" />
+      <Arrow x1={64} y1={22} x2={176} y2={22} />
       <Label x={120} y={16} text={rect ? 'A · Ancho' : 'A · Diámetro'} />
       {/* B: alto */}
-      <Line x1="200" y1="32" x2="200" y2="135" stroke={INK} strokeWidth="2" markerStart="url(#a)" markerEnd="url(#a)" />
+      <Arrow x1={200} y1={32} x2={200} y2={135} />
       {rect ? <Label x={200} y={150} text="B · Alto" /> : <Label x={208} y={88} text="B · Alto" anchor="start" />}
       {rect ? (
         <G>
           {/* vista desde arriba */}
           <Rect x="238" y="44" width="56" height="30" fill="none" stroke={colors.bark} strokeWidth="2" />
-          <Line x1="238" y1="86" x2="294" y2="86" stroke={INK} strokeWidth="2" markerStart="url(#a)" markerEnd="url(#a)" />
+          <Arrow x1={238} y1={86} x2={294} y2={86} />
           <Label x={266} y={104} text="C · Largo" />
           <SvgText x={266} y={36} fill={colors.barkSoft} fontSize="10" textAnchor="middle" fontFamily={fonts.body}>
             desde arriba
@@ -58,7 +70,6 @@ function PotDrawing({ rect }: { rect: boolean }) {
 function PlantDrawing() {
   return (
     <Svg width="100%" height={170} viewBox="0 0 300 170">
-      <Arrows />
       {/* maceta */}
       <Path d="M115 112 H185 L178 160 H122 Z" fill={colors.ember} opacity={0.85} />
       <Rect x="110" y="106" width="80" height="10" rx="3" fill="#B5652A" />
@@ -69,12 +80,12 @@ function PlantDrawing() {
       <Ellipse cx="150" cy="30" rx="14" ry="22" fill="#A9C084" />
       <Ellipse cx="128" cy="96" rx="26" ry="9" fill={colors.moss} transform="rotate(-10 128 96)" />
       {/* A: alto desde la tierra hasta la hoja más alta */}
-      <Line x1="240" y1="10" x2="240" y2="108" stroke={INK} strokeWidth="2" markerStart="url(#a)" markerEnd="url(#a)" />
+      <Arrow x1={240} y1={10} x2={240} y2={108} />
       <Line x1="150" y1="8" x2="246" y2="8" stroke={INK} strokeWidth="1" strokeDasharray="4 3" />
       <Line x1="185" y1="108" x2="246" y2="108" stroke={INK} strokeWidth="1" strokeDasharray="4 3" />
       <Label x={246} y={62} text="A · Alto" anchor="start" />
       {/* B: ancho de punta a punta */}
-      <Line x1="74" y1="138" x2="224" y2="138" stroke={INK} strokeWidth="2" markerStart="url(#a)" markerEnd="url(#a)" />
+      <Arrow x1={74} y1={138} x2={224} y2={138} />
       <Line x1="74" y1="80" x2="74" y2="142" stroke={INK} strokeWidth="1" strokeDasharray="4 3" />
       <Line x1="224" y1="72" x2="224" y2="142" stroke={INK} strokeWidth="1" strokeDasharray="4 3" />
       <Label x={60} y={160} text="B · Ancho" anchor="start" />
