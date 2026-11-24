@@ -225,3 +225,27 @@ describe('señales de trasplante', () => {
     expect(plan.repot.urgent).toBe(false);
   });
 });
+
+describe('recién llegada', () => {
+  it('no se abona hasta 30 días después de llegar', () => {
+    const plan = computeCarePlan(base({ today: '2026-06-10', arrivedDay: '2026-06-08', lastRepotDay: null }));
+    expect(plan.fertilize.nextDay).toBe('2026-07-08');
+    expect(plan.fertilize.pausedReason).toContain('Recién llegada');
+  });
+
+  it('el trasplante espera 3 semanas, salvo que haya 2 señales', () => {
+    const plan = computeCarePlan(
+      base({ today: '2026-04-02', arrivedDay: '2026-04-01', lastRepotDay: null, plant: { ...base().plant, potDiameterCm: 9 } }),
+    );
+    expect(plan.repot.nextDay).toBe('2026-04-22');
+    expect(plan.repot.note).toContain('Recién llegada');
+    const urgent = computeCarePlan(
+      base({
+        today: '2026-04-02',
+        arrivedDay: '2026-04-01',
+        plant: { ...base().plant, repotSigns: ['roots_out', 'root_bound'] },
+      }),
+    );
+    expect(urgent.repot.nextDay).toBe('2026-04-02');
+  });
+});

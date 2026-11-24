@@ -214,6 +214,7 @@ export default function PlantScreen() {
           onUndo={(t: TaskType) => run(t, () => undoTask(id, t))}
           onSnooze={() => setSnoozing(true)}
           onUpdate={onUpdate}
+          onRun={(key, action) => void run(key, action)}
           onMeasureLight={() => router.push({ pathname: '/light-meter', params: { plantId: id } })}
         />
       ) : null}

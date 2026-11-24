@@ -13,6 +13,7 @@ import { relativeDay, shortDate } from '@/lib/dates';
 import { colors, radius, space } from '@/theme/tokens';
 import { AppText } from './AppText';
 import { Button } from './Button';
+import { ArrivalCard } from './ArrivalCard';
 import { Card } from './Card';
 import { PotIcon, SunIcon } from './icons';
 import { MeasureGuide } from './MeasureGuide';
@@ -30,6 +31,8 @@ type Props = {
   onSnooze: () => void;
   onUpdate: (input: UpdatePlantInput) => Promise<void>;
   onMeasureLight: () => void;
+  /** Ejecuta una acción que devuelve la planta actualizada (con su indicador de carga) */
+  onRun: (key: string, action: () => Promise<PlantDetail>) => void;
 };
 
 const num = (s: string) => {
@@ -47,6 +50,7 @@ export function CareTab({
   onSnooze,
   onUpdate,
   onMeasureLight,
+  onRun,
 }: Props) {
   const { care, plant, today } = detail;
   const doneToday = (type: TaskType, last: string | null) => last === today && !!type;
@@ -54,6 +58,7 @@ export function CareTab({
 
   return (
     <View style={styles.wrap}>
+      <ArrivalCard detail={detail} busy={busy} onRun={onRun} />
       <ClimateCard detail={detail} />
 
       <Card>

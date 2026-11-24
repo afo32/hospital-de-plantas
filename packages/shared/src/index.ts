@@ -12,3 +12,4 @@ export * from './health.js';
 export * from './sharing.js';
 export * from './light.js';
 export * from './propagation.js';
+export * from './arrival.js';

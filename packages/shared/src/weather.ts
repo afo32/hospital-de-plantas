@@ -77,6 +77,8 @@ export const remindersSchema = z.object({
       checkup: z.array(z.string()).default([]),
       /** Crianzas con tareas ese día: "Tomates: pulverizar" */
       propagation: z.array(z.string()).default([]),
+      /** Plantas recién compradas con tareas ese día: "Monstera: segunda revisión de bichos" */
+      arrival: z.array(z.string()).default([]),
     }),
   ),
   /** Alertas de clima: se avisan la tarde anterior */

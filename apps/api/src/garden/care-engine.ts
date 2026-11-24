@@ -30,6 +30,8 @@ export type EngineInput = {
   lastWaterDay: string | null;
   lastFertilizeDay: string | null;
   lastRepotDay: string | null;
+  /** Día en que llegó a casa si sigue en el plan "Recién llegada" */
+  arrivedDay?: string | null;
   snoozedUntil: string | null;
   /** Hemisferio sur: invierte las estaciones */
   southern: boolean;
@@ -179,6 +181,14 @@ export function computeFertilize(input: EngineInput): CarePlan['fertilize'] {
       next = maxDay(next, resume)!;
     }
   }
+  // Recién comprada: en el vivero la abonan mucho; un mes sin abono.
+  if (input.arrivedDay) {
+    const resume = addDays(input.arrivedDay, 30);
+    if (resume > today) {
+      pausedReason = `Recién llegada: viene bien abonada del vivero. Empieza a abonar a partir del ${resume.slice(8)}/${resume.slice(5, 7)}.`;
+      next = maxDay(next, resume)!;
+    }
+  }
   if (!months.includes(monthOf(maxDay(next, today)!))) {
     const resume = nextGrowingStart(maxDay(next, today)!);
     pausedReason ??= `En reposo: se retoma en ${monthName(monthOf(resume))}.`;
@@ -267,6 +277,14 @@ export function computeRepot(input: EngineInput, pot: CarePlan['pot']): CarePlan
   } else if (signs.length === 1) {
     next = minDay(next, nextSpring) ?? nextSpring;
     note = `Has marcado 1 señal: aún puede esperar, pero vigílala. Si aparece otra, toca trasplantar. ${note}`;
+  }
+  // Recién comprada: que se adapte 3 semanas antes de cambiarla de maceta (salvo urgencia).
+  if (input.arrivedDay && signs.length < 2) {
+    const settled = addDays(input.arrivedDay, 21);
+    if (settled > today) {
+      if (next && next < settled) next = settled;
+      note = `Recién llegada: deja que se adapte antes de trasplantarla (a partir del ${settled.slice(8)}/${settled.slice(5, 7)}). ${note}`;
+    }
   }
   return { everyMonths, lastDay: input.lastRepotDay, nextDay: next, note, signs, urgent: signs.length >= 2 };
 }

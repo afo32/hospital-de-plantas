@@ -57,6 +57,8 @@ export const addPlantSchema = z
     lastWatered: z.enum(valuesOf(LAST_WATER_OPTIONS)),
     plantHeightCm: z.number().min(1).max(2000).optional(),
     plantWidthCm: z.number().min(1).max(2000).optional(),
+    /** La acaba de comprar o traer a casa: activa el plan "Recién llegada" */
+    justBought: z.boolean().optional(),
   })
   .refine((v) => v.potShape === 'round' || v.potLengthCm !== undefined, {
     message: 'Para macetas rectangulares indica el largo',

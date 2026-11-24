@@ -19,7 +19,7 @@ import { Button } from '@/components/Button';
 import { OptionList } from '@/components/OptionList';
 import { MeasureGuide } from '@/components/MeasureGuide';
 import { TextField } from '@/components/TextField';
-import { addPlant } from '@/lib/garden';
+import { addPlant, hideArrivalOffer } from '@/lib/garden';
 import { finishPropagation } from '@/lib/propagation';
 import { apiErrorToForm } from '@/lib/forms';
 import { colors, radius, space } from '@/theme/tokens';
@@ -39,6 +39,7 @@ type Answers = {
   overwateringGuard: OverwateringGuard[];
   lastRepotted: string | null;
   lastWatered: string | null;
+  justBought: 'yes' | 'no' | null;
   plantHeightCm: string;
   plantWidthCm: string;
 };
@@ -47,6 +48,11 @@ const num = (s: string) => {
   const n = Number(s.replace(',', '.'));
   return s.trim() && Number.isFinite(n) && n > 0 ? n : undefined;
 };
+
+const JUST_BOUGHT = [
+  { value: 'yes', label: 'Sí, acaba de llegar', hint: 'Te damos un plan para su primer mes: revisar plagas, adaptarla a la luz, cuándo regar y abonar…' },
+  { value: 'no', label: 'No, ya la tenía' },
+] as const;
 
 const YES_NO = [
   { value: 'yes', label: 'Sí, tiene agujeros' },
@@ -75,6 +81,8 @@ export default function PlantSetupScreen() {
     overwateringGuard: [],
     lastRepotted: null,
     lastWatered: null,
+    // Si viene de una crianza, la has criado tú: no es una compra.
+    justBought: fromPropagation ? 'no' : null,
     plantHeightCm: '',
     plantWidthCm: '',
   });
@@ -103,6 +111,18 @@ export default function PlantSetupScreen() {
         />
       ),
     },
+    ...(fromPropagation
+      ? []
+      : [
+          {
+            title: 'Llegada',
+            question: '¿La acabas de comprar o traer a casa?',
+            valid: !!a.justBought,
+            body: (
+              <OptionList options={JUST_BOUGHT} value={a.justBought} onChange={(v) => set('justBought', v)} />
+            ),
+          },
+        ]),
     {
       title: 'Ubicación',
       question: '¿Dónde va a estar?',
@@ -264,6 +284,7 @@ export default function PlantSetupScreen() {
       lastWatered: a.lastWatered,
       plantHeightCm: num(a.plantHeightCm),
       plantWidthCm: num(a.plantWidthCm),
+      justBought: a.justBought === 'yes',
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Revisa las respuestas');
@@ -273,6 +294,8 @@ export default function PlantSetupScreen() {
     setError('');
     try {
       const created = await addPlant(gardenId, parsed.data);
+      // Ya ha contestado que no es nueva: no volver a preguntarlo en su ficha.
+      if (a.justBought !== 'yes') void hideArrivalOffer(created.plant.id);
       // Si viene de una crianza, la crianza queda terminada y enlazada a la planta nueva.
       if (fromPropagation) {
         await finishPropagation(fromPropagation, { result: 'done', plantId: created.plant.id }).catch(() => undefined);

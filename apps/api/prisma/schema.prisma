@@ -175,6 +175,10 @@ model UserPlant {
   /// Señales de trasplante marcadas en la última comprobación (REPOT_SIGNS)
   repotSigns         String[]  @default([])
   repotSignsCheckedAt DateTime?
+  /// Día en que llegó a casa (plan "Recién llegada"); null = sin plan o ya adaptada
+  arrivedAt          DateTime?
+  /// Tareas del plan "Recién llegada" ya hechas (ids)
+  arrivalDone        String[]  @default([])
   archivedAt         DateTime?
   /// Quién la añadió al jardín
   addedById          String?   @db.Uuid

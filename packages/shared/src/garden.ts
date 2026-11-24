@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { REPOT_SIGNS } from './catalog.js';
+import { arrivalPlanSchema } from './arrival.js';
 import { speciesSummarySchema } from './species.js';
 
 const REPOT_SIGN_VALUES = REPOT_SIGNS.map((s) => s.value) as [string, ...string[]];
@@ -104,6 +105,8 @@ export const plantDetailSchema = z.object({
     createdAt: z.string(),
   }),
   care: carePlanSchema,
+  /** Plan de las primeras semanas si la acaba de comprar (null si no) */
+  arrival: arrivalPlanSchema.nullable().default(null),
   today: daySchema,
 });
 export type PlantDetail = z.infer<typeof plantDetailSchema>;

@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   type AddPlantInput,
   calendarSchema,
@@ -75,6 +76,31 @@ export function snoozeWatering(id: string, days: number): Promise<PlantDetail> {
   return runOrQueue({ kind: 'snooze', plantId: id, days, day: localToday() }, async () =>
     plantDetailSchema.parse(await api(`/plants/${id}/snooze`, { method: 'POST', body: { days } })),
   );
+}
+
+/* ---------- Recién llegada ---------- */
+
+const OFFER_KEY = 'arrivalOfferHidden.';
+
+/** "No, ya la tenía": no volver a ofrecer el plan para esta planta en este móvil. */
+export async function hideArrivalOffer(id: string): Promise<void> {
+  await AsyncStorage.setItem(OFFER_KEY + id, '1').catch(() => undefined);
+}
+
+export async function isArrivalOfferHidden(id: string): Promise<boolean> {
+  return (await AsyncStorage.getItem(OFFER_KEY + id).catch(() => null)) === '1';
+}
+
+export async function startArrival(id: string): Promise<PlantDetail> {
+  return plantDetailSchema.parse(await api(`/plants/${id}/arrival`, { method: 'POST' }));
+}
+
+export async function toggleArrivalTask(id: string, taskId: string, done: boolean): Promise<PlantDetail> {
+  return plantDetailSchema.parse(await api(`/plants/${id}/arrival/tasks`, { method: 'POST', body: { taskId, done } }));
+}
+
+export async function endArrival(id: string): Promise<PlantDetail> {
+  return plantDetailSchema.parse(await api(`/plants/${id}/arrival`, { method: 'DELETE' }));
 }
 
 export async function getCalendar(id: string, from: string, to: string): Promise<CalendarResponse> {

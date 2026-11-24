@@ -1,6 +1,10 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   type AddPlantInput,
+  ARRIVAL_DAYS,
+  type ArrivalPlan,
+  arrivalDrafts,
+  arrivalIntro,
   type CalendarItem,
   type CalendarResponse,
   type CarePlan,
@@ -101,6 +105,7 @@ export class GardenService {
       lastWaterDay: this.lastDayOf(plant, 'water', ctx),
       lastFertilizeDay: this.lastDayOf(plant, 'fertilize', ctx),
       lastRepotDay: this.lastDayOf(plant, 'repot', ctx),
+      arrivedDay: this.arrivedDay(plant, ctx),
       snoozedUntil: plant.snoozedUntil ? localDay(plant.snoozedUntil, ctx.tz) : null,
       southern: ctx.southern,
       recentWaterEvents: plant.events
@@ -109,6 +114,85 @@ export class GardenService {
       weather: ctx.weather,
       plantName: plant.nickname ?? plant.species.commonNames[0] ?? plant.species.scientificName,
     });
+  }
+
+  /* ---------- Recién llegada ---------- */
+
+  /** Día en que llegó, si sigue dentro del plan "Recién llegada". */
+  private arrivedDay(plant: UserPlant, ctx: Ctx): string | null {
+    if (!plant.arrivedAt) return null;
+    const day = plant.arrivedAt.toISOString().slice(0, 10);
+    return diffDays(day, ctx.today) <= ARRIVAL_DAYS + 3 ? day : null;
+  }
+
+  private arrivalPlan(plant: PlantWithRelations, ctx: Ctx, otherPlants: number): ArrivalPlan | null {
+    const start = this.arrivedDay(plant, ctx);
+    if (!start) return null;
+    let care: SpeciesCare;
+    try {
+      care = this.careOf(plant.species);
+    } catch {
+      return null;
+    }
+    // Animales para los que es tóxica, según la ficha (si ya está lista).
+    const profile = speciesProfileSchema.safeParse(plant.species.profileEs);
+    const toxicFor = profile.success
+      ? profile.data.quickFacts.toxicityPets.filter((t) => t.level === 'toxic' || t.level === 'severe').map((t) => t.animal)
+      : [];
+    const done = new Set(plant.arrivalDone);
+    const drafts = arrivalDrafts({
+      category: plant.species.category,
+      location: plant.location,
+      lightLevel: plant.lightLevel,
+      hasDrainage: plant.hasDrainage,
+      waterStyle: care.waterStyle,
+      humidityMinPct: care.humidityMinPct,
+      luxMin: care.luxMin,
+      frostTolerant: care.frostTolerant,
+      tempMinC: care.tempMinC,
+      toxicFor,
+      otherPlants,
+      month: monthOf(start),
+      southern: ctx.southern,
+    });
+    return {
+      startDay: start,
+      endDay: addDays(start, ARRIVAL_DAYS),
+      dayNumber: Math.max(0, diffDays(start, ctx.today)),
+      intro: arrivalIntro(plant.species.category),
+      tasks: drafts.map((d) => ({ ...d, dueDay: addDays(start, d.offset), done: done.has(d.id) })),
+    };
+  }
+
+  private otherPlantsCount(plant: UserPlant) {
+    return this.prisma.userPlant.count({ where: { gardenId: plant.gardenId, archivedAt: null, id: { not: plant.id } } });
+  }
+
+  /** Empieza el plan "Recién llegada" en una planta que ya estaba en el jardín. */
+  async startArrival(userId: string, plantId: string): Promise<PlantDetail> {
+    const plant = await this.loadPlant(userId, plantId, true);
+    const ctx = await this.context(userId);
+    // Si la añadiste hace poco, el plan cuenta desde ese día.
+    const created = localDay(plant.createdAt, ctx.tz);
+    const start = diffDays(created, ctx.today) <= 14 ? created : ctx.today;
+    await this.prisma.userPlant.update({ where: { id: plantId }, data: { arrivedAt: dayToDate(start), arrivalDone: [] } });
+    return this.getPlant(userId, plantId);
+  }
+
+  async arrivalTask(userId: string, plantId: string, taskId: string, done: boolean): Promise<PlantDetail> {
+    const plant = await this.loadPlant(userId, plantId, true);
+    const set = new Set(plant.arrivalDone);
+    if (done) set.add(taskId);
+    else set.delete(taskId);
+    await this.prisma.userPlant.update({ where: { id: plantId }, data: { arrivalDone: [...set].slice(0, 60) } });
+    return this.getPlant(userId, plantId);
+  }
+
+  /** "Ya está adaptada": cierra el plan (y deja de frenar el abono y el trasplante). */
+  async endArrival(userId: string, plantId: string): Promise<PlantDetail> {
+    await this.loadPlant(userId, plantId, true);
+    await this.prisma.userPlant.update({ where: { id: plantId }, data: { arrivedAt: null, arrivalDone: [] } });
+    return this.getPlant(userId, plantId);
   }
 
   private summary(plant: PlantWithRelations, plan: CarePlan, ctx: Ctx): PlantSummary {
@@ -204,6 +288,7 @@ export class GardenService {
         plantWidthCm: input.plantWidthCm ?? null,
         lastWateredAt: waterDay ? dayToDate(waterDay) : null,
         lastRepottedAt: repotDay ? dayToDate(repotDay) : null,
+        arrivedAt: input.justBought ? dayToDate(ctx.today) : null,
         waterEveryDays: 7,
         waterAmountMl: 200,
         events: {
@@ -250,6 +335,7 @@ export class GardenService {
         createdAt: plant.createdAt.toISOString(),
       },
       care: plan,
+      arrival: plant.arrivedAt ? this.arrivalPlan(plant, ctx, await this.otherPlantsCount(plant)) : null,
       today: ctx.today,
     };
   }
@@ -496,10 +582,17 @@ export class GardenService {
     const ctx = await this.context(userId);
     const to = addDays(ctx.today, days);
     const plants = await this.plantsOfGarden(gardenId);
-    type DayEntry = { water: string[]; fertilize: string[]; repot: string[]; checkup: string[]; propagation: string[] };
+    type DayEntry = {
+      water: string[];
+      fertilize: string[];
+      repot: string[];
+      checkup: string[];
+      propagation: string[];
+      arrival: string[];
+    };
     const byDay = new Map<string, DayEntry>();
     const entryOf = (day: string) => {
-      const entry = byDay.get(day) ?? { water: [], fertilize: [], repot: [], checkup: [], propagation: [] };
+      const entry = byDay.get(day) ?? { water: [], fertilize: [], repot: [], checkup: [], propagation: [], arrival: [] };
       byDay.set(day, entry);
       return entry;
     };
@@ -520,6 +613,12 @@ export class GardenService {
       }
       for (const a of plan.climate?.alerts ?? []) {
         alerts.set(a.day, [...(alerts.get(a.day) ?? []), a.message]);
+      }
+      // Recién llegadas: las tareas de seguimiento (revisiones, sol, abono…).
+      const arrival = p.arrivedAt ? this.arrivalPlan(p, ctx, plants.length - 1) : null;
+      for (const t of arrival?.tasks ?? []) {
+        if (t.done || t.offset === 0 || t.dueDay < ctx.today || t.dueDay > to) continue;
+        entryOf(t.dueDay).arrival.push(`${name}: ${t.title.charAt(0).toLowerCase()}${t.title.slice(1)}`);
       }
     }
 
@@ -581,12 +680,21 @@ export class GardenService {
     const alerts = new Map<string, Reminders['alerts'][number]>();
     for (const r of parts) {
       for (const d of r.days) {
-        const e = byDay.get(d.day) ?? { day: d.day, water: [], fertilize: [], repot: [], checkup: [], propagation: [] };
+        const e = byDay.get(d.day) ?? {
+          day: d.day,
+          water: [],
+          fertilize: [],
+          repot: [],
+          checkup: [],
+          propagation: [],
+          arrival: [],
+        };
         e.water.push(...d.water);
         e.fertilize.push(...d.fertilize);
         e.repot.push(...d.repot);
         e.checkup.push(...d.checkup);
         e.propagation.push(...d.propagation);
+        e.arrival.push(...d.arrival);
         byDay.set(d.day, e);
       }
       for (const a of r.alerts) {

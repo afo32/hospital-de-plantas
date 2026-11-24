@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  arrivalTaskInputSchema,
+  type ArrivalTaskInput,
   addPlantSchema,
   type AddPlantInput,
   calendarQuerySchema,
@@ -143,6 +145,30 @@ export class PlantsController {
     @Body({ schema: snoozeSchema }) body: SnoozeInput,
   ): Promise<PlantDetail> {
     return this.garden.snooze(userId, id, body.days);
+  }
+
+  /** Plan "Recién llegada": empezarlo en una planta que ya estaba en el jardín. */
+  @Post('arrival')
+  @HttpCode(200)
+  startArrival(@CurrentUserId() userId: string, @Param('id', { schema: uuid }) id: string): Promise<PlantDetail> {
+    return this.garden.startArrival(userId, id);
+  }
+
+  /** Marcar o desmarcar una tarea del plan: { taskId, done } */
+  @Post('arrival/tasks')
+  @HttpCode(200)
+  arrivalTask(
+    @CurrentUserId() userId: string,
+    @Param('id', { schema: uuid }) id: string,
+    @Body({ schema: arrivalTaskInputSchema }) body: ArrivalTaskInput,
+  ): Promise<PlantDetail> {
+    return this.garden.arrivalTask(userId, id, body.taskId, body.done);
+  }
+
+  /** "Ya está adaptada": cierra el plan. */
+  @Delete('arrival')
+  endArrival(@CurrentUserId() userId: string, @Param('id', { schema: uuid }) id: string): Promise<PlantDetail> {
+    return this.garden.endArrival(userId, id);
   }
 
   @Get('calendar')

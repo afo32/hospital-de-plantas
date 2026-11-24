@@ -77,10 +77,11 @@ export function buildNotifications(r: Reminders, now = new Date()) {
     if (r.notifyCare && d.repot.length) lines.push(`Trasplantar: ${list(d.repot)}`);
     if (r.notifyCare && d.checkup.length) lines.push(`Revisar su salud: ${list(d.checkup)}`);
     if (r.notifyCare) for (const line of d.propagation) lines.push(`🌱 ${line}`);
+    if (r.notifyCare) for (const line of d.arrival) lines.push(`🪴 ${line}`);
     if (!lines.length) continue;
     const date = at(d.day, r.reminderHour);
     if (date <= now) continue;
-    const total = d.water.length + d.fertilize.length + d.repot.length + d.checkup.length + d.propagation.length;
+    const total = d.water.length + d.fertilize.length + d.repot.length + d.checkup.length + d.propagation.length + d.arrival.length;
     out.push({
       date,
       title:
